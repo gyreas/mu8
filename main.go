@@ -67,14 +67,15 @@ cycle:
 		case 0x10:
 			fmt.Println("Jump")
 		case 0x20:
-			h := uint16(code) << 0x08
+			h := uint16(code&0x0f) << 0x08
 			l := uint16(program[ip+1])
 
 			mu8.ReturnStack[mu8.retptr] = ip
 			mu8.retptr += 1
 
-			ip = uint((h|l)&0x0fff) - 0x0200
-			fmt.Printf("Call: 0x%.4x\n", ip)
+			pre_ip := ip
+			ip = uint(h|l) - 0x0200
+			fmt.Printf("Call: 0x%.4x[0x%.4x]\n", ip, pre_ip)
 		case 0x30:
 			fmt.Println("Skip = KK")
 		case 0x40:
@@ -92,38 +93,28 @@ cycle:
 			fmt.Println("Add")
 
 		case 0x80:
+			regX := code & 0x0f
+			regY := program[ip+1] >> 4
 			switch program[ip+1] & 1 {
 			case 0x00:
-				regX := code & 0x0f
-				regY := program[ip+1] >> 4
 				mu8.Regs[regX] = mu8.Regs[regY]
 				fmt.Println("Copy")
 			case 0x01:
-				regX := code & 0x0f
-				regY := program[ip+1] >> 4
 				mu8.Regs[regX] |= mu8.Regs[regY]
 				fmt.Println("Logical OR")
 			case 0x02:
-				regX := code & 0x0f
-				regY := program[ip+1] >> 4
 				mu8.Regs[regX] &= mu8.Regs[regY]
 				fmt.Println("Logical AND")
 			case 0x03:
-				regX := code & 0x0f
-				regY := program[ip+1] >> 4
 				mu8.Regs[regX] ^= mu8.Regs[regY]
 				fmt.Println("Logical XOR")
 			case 0x04:
-				regX := code & 0x0f
-				regY := program[ip+1] >> 4
 				mu8.Regs[regX] += mu8.Regs[regY]
 				if mu8.Regs[regX] > 0xff {
 					mu8.Regs[0x0f] = 1
 				}
 				fmt.Println("Add VY. Set VF=1")
 			case 0x05:
-				regX := code & 0x0f
-				regY := program[ip+1] >> 4
 				mu8.Regs[regX] -= mu8.Regs[regY]
 				if mu8.Regs[regX] < mu8.Regs[regY] {
 					mu8.Regs[0x0f] = 0
