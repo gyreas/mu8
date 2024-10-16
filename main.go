@@ -131,6 +131,9 @@ cycle:
 			}
 			fmt.Println("Skip next if VX != VY")
 		case 0xa0:
+			h := uint16(code&0x0f) << 0x08
+			l := uint16(program[ip+1])
+			mu8.I = h | l
 			fmt.Println("Set Mem Pointer")
 		case 0xb0:
 			fmt.Println("Jump to")
@@ -164,6 +167,7 @@ cycle:
 			case 0x18:
 				fmt.Println("Set Tone")
 			case 0x1e:
+				mu8.I += uint16(mu8.Regs[code&0x0f])
 				fmt.Println("Add to Mem Pointer")
 			case 0x29:
 				fmt.Println("Set Pointer to show VX")
@@ -187,9 +191,10 @@ cycle:
 		}
 	}
 
-	fmt.Printf("%v\n", mu8.Regs)
-	fmt.Printf("%v\n", mu8.ReturnStack)
-	fmt.Printf("%v\n", mu8.retptr)
+	fmt.Printf("I: 0x%.4x\n", mu8.I)
+	fmt.Printf("Regs: %v\n", mu8.Regs)
+	fmt.Printf("RetStack: %v\n", mu8.ReturnStack)
+	fmt.Printf("Retptr: %v\n", mu8.retptr)
 }
 
 func main() {
