@@ -36,11 +36,11 @@ func (mu8 *Mu8) loadRom(rom []uint8) {
 }
 
 func (mu8 *Mu8) interpretRom() {
-	program := mu8.Mem[0x200:]
-	sz := len(program)
+	program := mu8.Mem[0x0200:]
+	sz := uint(len(program))
 
 	var code uint8
-	var ip int
+	var ip uint
 	for ip = 0; ip < sz; ip += 2 {
 		code = program[ip]
 
@@ -65,28 +65,62 @@ func (mu8 *Mu8) interpretRom() {
 		case 0x50:
 			fmt.Println("Skip != VY")
 		case 0x60:
+			regX := code & 0x0f
+			mu8.Regs[regX] = program[ip+1]
 			fmt.Println("Assign")
 		case 0x70:
+			regX := code & 0x0f
+			mu8.Regs[regX] += program[ip+1]
 			fmt.Println("Add")
+
 		case 0x80:
 			switch program[ip+1] & 1 {
 			case 0x00:
+				regX := code & 0x0f
+				regY := program[ip+1] >> 4
+				mu8.Regs[regX] = mu8.Regs[regY]
 				fmt.Println("Copy")
 			case 0x01:
+				regX := code & 0x0f
+				regY := program[ip+1] >> 4
+				mu8.Regs[regX] |= mu8.Regs[regY]
 				fmt.Println("Logical OR")
 			case 0x02:
+				regX := code & 0x0f
+				regY := program[ip+1] >> 4
+				mu8.Regs[regX] &= mu8.Regs[regY]
 				fmt.Println("Logical AND")
 			case 0x03:
+				regX := code & 0x0f
+				regY := program[ip+1] >> 4
+				mu8.Regs[regX] ^= mu8.Regs[regY]
 				fmt.Println("Logical XOR")
 			case 0x04:
+				regX := code & 0x0f
+				regY := program[ip+1] >> 4
+				mu8.Regs[regX] += mu8.Regs[regY]
+				if mu8.Regs[regX] > 0xff {
+					mu8.Regs[0x0f] = 1
+				}
 				fmt.Println("Add VY. Set VF=1")
 			case 0x05:
-				fmt.Println("Subtract VY")
+				regX := code & 0x0f
+				regY := program[ip+1] >> 4
+				mu8.Regs[regX] -= mu8.Regs[regY]
+				if mu8.Regs[regX] < mu8.Regs[regY] {
+					mu8.Regs[0x0f] = 0
+				}
+				fmt.Println("Subtract VY. Set VF=0")
 			default:
 				fmt.Fprintf(os.Stderr, "error: unknown byte: [0x%.2x] (0x80)\n", program[ip+1])
 			}
 		case 0x90:
-			fmt.Println("Subtract")
+			regX := code & 0x0f
+			regY := program[ip+1] >> 4
+			if mu8.Regs[regX] != mu8.Regs[regY] {
+				ip += 2
+			}
+			fmt.Println("Skip next if VX != VY")
 		case 0xa0:
 			fmt.Println("Set Mem Pointer")
 		case 0xb0:
@@ -108,6 +142,8 @@ func (mu8 *Mu8) interpretRom() {
 			switch program[ip+1] & 0xff {
 			case 0x00:
 				fmt.Println("Stop")
+				break
+
 			case 0x07:
 				fmt.Println("Timer")
 			case 0x0a:
@@ -141,6 +177,8 @@ func (mu8 *Mu8) interpretRom() {
 			fmt.Fprintf(os.Stderr, "error: unknown byte: [0x%.2x] (general)\n", program[ip+1])
 		}
 	}
+
+	fmt.Printf("%v\n", mu8.Regs)
 }
 
 func main() {
