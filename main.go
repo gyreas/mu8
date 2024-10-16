@@ -30,8 +30,7 @@ func initMu8() Mu8 {
 
 func (mu8 *Mu8) loadRom(rom []uint8) {
 	if len(rom)&0b100 != 0 {
-		fmt.Fprintf(os.Stderr, "error: possibly faulty ROM\n")
-		os.Exit(1)
+		fmt.Fprintf(os.Stderr, "warning: possibly faulty ROM\n")
 	}
 	copy(mu8.Mem[0x200:], rom)
 }
