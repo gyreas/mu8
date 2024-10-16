@@ -16,15 +16,19 @@ type Mu8 struct {
 	 * 0100  –  01F   Display
 	 * 0200  –  0FFF  Program area
 	 */
-	Mem  [2048]uint8
-	Regs [16]uint8 /* V0-VF */
+	Mem         [2048]uint8
+	Regs        [16]uint8 /* V0-VF */
+	ReturnStack [64]uint  /* Subroutine Call Stack */
+	retptr      int       /* Call stack pointer */
 }
 
 func initMu8() Mu8 {
 	return Mu8{
-		I:    0,
-		Mem:  [2048]uint8{},
-		Regs: [16]uint8{},
+		I:           0,
+		Mem:         [2048]uint8{},
+		Regs:        [16]uint8{},
+		ReturnStack: [64]uint{},
+		retptr:      0,
 	}
 }
 
@@ -52,18 +56,30 @@ func (mu8 *Mu8) interpretRom() {
 			case 0xe0:
 				fmt.Println("Clear")
 			case 0xee:
+				if mu8.retptr > 0 {
+					mu8.retptr--
+				}
+				ip = mu8.ReturnStack[mu8.retptr]
 				fmt.Println("Return")
 			}
 		case 0x10:
 			fmt.Println("Jump")
 		case 0x20:
-			fmt.Println("Call")
+			h := uint16(code) << 0x08
+			l := uint16(program[ip+1])
+
+			mu8.ReturnStack[mu8.retptr] = ip
+			mu8.retptr += 1
+
+			ip = uint((h|l)&0x0fff) - 0x0200
+			fmt.Printf("Call: 0x%.4x\n", ip)
 		case 0x30:
 			fmt.Println("Skip = KK")
 		case 0x40:
 			fmt.Println("Skip != KK")
 		case 0x50:
 			fmt.Println("Skip != VY")
+
 		case 0x60:
 			regX := code & 0x0f
 			mu8.Regs[regX] = program[ip+1]
@@ -179,6 +195,8 @@ func (mu8 *Mu8) interpretRom() {
 	}
 
 	fmt.Printf("%v\n", mu8.Regs)
+	fmt.Printf("%v\n", mu8.ReturnStack)
+	fmt.Printf("%v\n", mu8.retptr)
 }
 
 func main() {
