@@ -45,6 +45,7 @@ func (mu8 *Mu8) interpretRom() {
 
 	var code uint8
 	var ip uint
+cycle:
 	for ip = 0; ip < sz; ip += 2 {
 		code = program[ip]
 
@@ -59,8 +60,9 @@ func (mu8 *Mu8) interpretRom() {
 				if mu8.retptr > 0 {
 					mu8.retptr--
 				}
-				ip = mu8.ReturnStack[mu8.retptr]
-				fmt.Println("Return")
+				ip = mu8.ReturnStack[mu8.retptr] + 2 // goto next instruction after caller
+				fmt.Printf("Return: 0x%.4x\n", ip)
+				break cycle
 			}
 		case 0x10:
 			fmt.Println("Jump")
@@ -158,7 +160,7 @@ func (mu8 *Mu8) interpretRom() {
 			switch program[ip+1] & 0xff {
 			case 0x00:
 				fmt.Println("Stop")
-				break
+				break cycle
 
 			case 0x07:
 				fmt.Println("Timer")
