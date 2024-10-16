@@ -6,6 +6,22 @@ import (
 	"os"
 )
 
+type Mu8 struct {
+	Mem  [2048]byte
+	Regs [16]byte
+}
+
+func initMu8() Mu8 {
+	return Mu8{
+		Mem:  [2048]byte{},
+		Regs: [16]byte{},
+	}
+}
+
+func (mu8 *Mu8) loadRom(rom []byte) {
+	copy(mu8.Mem[0x200:], rom)
+}
+
 func main() {
 	argv := os.Args
 	if len(argv) < 2 {
@@ -24,11 +40,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	for i, b := range buf {
-		fmt.Printf("%.2X", b)
-		if i&1 == 1 {
-			fmt.Printf(" ")
-		}
-	}
-	fmt.Println()
+	mu8 := initMu8()
+	mu8.loadRom(buf)
 }
