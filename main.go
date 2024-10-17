@@ -50,6 +50,10 @@ func (mu8 *Mu8) interpretRom() {
 cycle:
 	for ip = 0; ip < sz; ip += 2 {
 		code = program[ip]
+		h1 := code & 0x0f
+		l := program[ip+1]
+		l0 := l >> 0x04
+		l1 := l & 0x0f
 
 		switch code & 0xf0 {
 		case 0x00:
@@ -70,14 +74,11 @@ cycle:
 		case 0x10:
 			fmt.Println("Jump")
 		case 0x20:
-			h := uint16(code&0x0f) << 0x08
-			l := uint16(program[ip+1])
-
 			mu8.ReturnStack[mu8.retptr] = ip
 			mu8.retptr += 1
 
 			pre_ip := ip
-			ip = uint(h|l) - 0x0200
+			ip = uint((h1<<0x08)|l) - 0x0200
 			fmt.Printf("Call: 0x%.4x[0x%.4x]\n", ip, pre_ip)
 		case 0x30:
 			fmt.Println("Skip = KK")
@@ -87,17 +88,15 @@ cycle:
 			fmt.Println("Skip != VY")
 
 		case 0x60:
-			regX := code & 0x0f
-			mu8.Regs[regX] = program[ip+1]
+			mu8.Regs[h1] = program[ip+1]
 			fmt.Println("Assign")
 		case 0x70:
-			regX := code & 0x0f
-			mu8.Regs[regX] += program[ip+1]
+			mu8.Regs[h1] += program[ip+1]
 			fmt.Println("Add")
 
 		case 0x80:
-			regX := code & 0x0f
-			regY := program[ip+1] >> 4
+			regX := h1
+			regY := l0
 			switch program[ip+1] & 1 {
 			case 0x00:
 				mu8.Regs[regX] = mu8.Regs[regY]
@@ -127,17 +126,13 @@ cycle:
 				fmt.Fprintf(os.Stderr, "error: unknown byte: [0x%.2x] (0x80)\n", program[ip+1])
 			}
 		case 0x90:
-			regX := code & 0x0f
-			regY := program[ip+1] >> 4
-			if mu8.Regs[regX] != mu8.Regs[regY] {
+			if mu8.Regs[h1] != mu8.Regs[l0] {
 				ip += 2
 			}
 			fmt.Println("Skip next if VX != VY")
 		case 0xa0:
-			h := uint16(code&0x0f) << 0x08
-			l := uint16(program[ip+1])
-			mu8.I = h | l
-			fmt.Println("Set Mem Pointer")
+			mu8.I = (uint16(h1) << 0x08) | uint16(l)
+			fmt.Printf("Set Mem Pointer: 0x%.4x\n", mu8.I)
 		case 0xb0:
 			fmt.Println("Jump to")
 		case 0xc0:
