@@ -72,6 +72,7 @@ cycle:
 				break cycle
 			}
 		case 0x10:
+			ip = uint((h1<<0x08)|l) - 0x0200
 			fmt.Println("Jump")
 		case 0x20:
 			mu8.ReturnStack[mu8.retptr] = ip
@@ -134,7 +135,8 @@ cycle:
 			mu8.I = (uint16(h1) << 0x08) | uint16(l)
 			fmt.Printf("Set Mem Pointer: 0x%.4x\n", mu8.I)
 		case 0xb0:
-			fmt.Println("Jump to")
+			ip = uint((h1<<0x08)|l) - 0x0200 + uint(mu8.Regs[0x00])
+			fmt.Println("Jump to Mem Addr + V0")
 		case 0xc0:
 			fmt.Println("Get random byte. AND with KK")
 		case 0xd0:
