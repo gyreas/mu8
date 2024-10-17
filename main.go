@@ -23,6 +23,8 @@ type Mu8 struct {
 }
 
 func initMu8() Mu8 {
+	clear_fb()
+
 	return Mu8{
 		I:           0,
 		Mem:         [2048]uint8{},
@@ -55,6 +57,7 @@ cycle:
 			case 0x00:
 				continue
 			case 0xe0:
+				clear_fb()
 				fmt.Println("Clear")
 			case 0xee:
 				if mu8.retptr > 0 {
@@ -140,7 +143,21 @@ cycle:
 		case 0xc0:
 			fmt.Println("Get random byte. AND with KK")
 		case 0xd0:
-			fmt.Println("Display byte pattern")
+			{
+				x := int(mu8.Regs[h1])
+				y := int(mu8.Regs[l0])
+				n := l1
+
+				sprite := program[mu8.I-0x0200:][:n]
+				changed_px := draw_sprite_at(sprite, x, y)
+
+				mu8.Regs[0x0f] = 0x00
+				if changed_px {
+					mu8.Regs[0x0f] = 0x01
+				}
+
+				fmt.Println("Display byte pattern")
+			}
 		case 0xe0:
 			switch program[ip+1] {
 			case 0x9e:
@@ -191,10 +208,13 @@ cycle:
 		}
 	}
 
+	fmt.Println()
 	fmt.Printf("I: 0x%.4x\n", mu8.I)
 	fmt.Printf("Regs: %v\n", mu8.Regs)
 	fmt.Printf("RetStack: %v\n", mu8.ReturnStack)
 	fmt.Printf("Retptr: %v\n", mu8.retptr)
+
+	draw_fb()
 }
 
 func main() {
