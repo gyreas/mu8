@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"crypto/rand"
 	"fmt"
 	"io/fs"
 	"os"
@@ -146,7 +147,17 @@ cycle:
 			ip = uint((uint16(h1)<<0x08)|uint16(l)) + uint(mu8.Regs[0x00])
 			fmt.Println("Jump to Mem Addr + V0")
 		case 0xc0:
-			fmt.Println("Get random byte. AND with KK")
+			{
+				c := 10
+				b := make([]uint8, c)
+				_, err := rand.Read(b)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "error: %s\n", err)
+					return
+				}
+				mu8.Regs[h1] = b[4] /* 4 is the charm */ & l
+				fmt.Printf("Get random byte. AND with KK(0x%.4x): [0x%.4x]\n", l, mu8.Regs[h1])
+			}
 		case 0xd0:
 			{
 				x := int(mu8.Regs[h1])
@@ -244,7 +255,22 @@ cycle:
 				mu8.I = FONT_DATA_BASE_ADDRESS + uint16(0x05*mu8.Regs[h1])
 				fmt.Printf("Set Pointer to show VX: I=0x%.4x\n", mu8.I)
 			case 0x33:
-				fmt.Println("Store 3-digit decimal")
+				{ // BCD
+					b := uint16(mu8.Regs[h1])
+					i := uint16(0)
+					lower := uint16(100)
+
+					fmt.Println("Store 3-digit decimal")
+					fmt.Printf("[%.3d](I=0x%.4x) d=", b, mu8.I)
+					for lower != 0 {
+						fmt.Printf("%d ", b/lower)
+						program[mu8.I+i] = uint8(b / lower)
+						b %= lower
+						lower /= 10
+						i++
+					}
+					fmt.Println()
+				}
 			case 0x55:
 				fmt.Println("Store V0-VX at I")
 			case 0x65:
