@@ -91,18 +91,26 @@ cycle:
 			ip = uint((uint16(h1) << 0x08) | uint16(l))
 			fmt.Printf("Call: 0x%.4x [0x%.4x]\n", ip, pre_ip)
 		case 0x30:
+			if mu8.Regs[h1] == l {
+				ip += 2
+			}
 			fmt.Println("Skip = KK")
 		case 0x40:
+			if mu8.Regs[h1] != l {
+				ip += 2
+			}
 			fmt.Println("Skip != KK")
 		case 0x50:
-			fmt.Println("Skip != VY")
-
+			if mu8.Regs[h1] == mu8.Regs[l0] {
+				ip += 2
+			}
+			fmt.Println("Skip = VY", mu8.Regs[h1], mu8.Regs[l0])
 		case 0x60:
-			mu8.Regs[h1] = program[ip+1]
-			fmt.Println("Assign")
+			fmt.Printf("Assign: %v 0x%.4x = 0x%.4x\n", mu8.Regs[:3], mu8.Regs[h1], l)
+			mu8.Regs[h1] = l
 		case 0x70:
-			mu8.Regs[h1] += program[ip+1]
-			fmt.Println("Add")
+			fmt.Printf("Add: 0x%.4x += 0x%.4x\n", mu8.Regs[h1], l)
+			mu8.Regs[h1] += l
 
 		case 0x80:
 			regX := h1
@@ -121,17 +129,21 @@ cycle:
 				mu8.Regs[regX] ^= mu8.Regs[regY]
 				fmt.Println("Logical XOR")
 			case 0x04:
+				if mu8.Regs[regX]+mu8.Regs[regY] > 0xff {
+					mu8.Regs[0x0f] = 0x01
+				} else {
+					mu8.Regs[0x0f] = 0x00
+				}
 				mu8.Regs[regX] += mu8.Regs[regY]
-				if mu8.Regs[regX] > 0xff {
-					mu8.Regs[0x0f] = 1
-				}
-				fmt.Println("Add VY. Set VF=1")
+				fmt.Println("Add VY. Set overflow flag VF")
 			case 0x05:
-				mu8.Regs[regX] -= mu8.Regs[regY]
 				if mu8.Regs[regX] < mu8.Regs[regY] {
-					mu8.Regs[0x0f] = 0
+					mu8.Regs[0x0f] = 0x00
+				} else {
+					mu8.Regs[0x0f] = 0x01
 				}
-				fmt.Println("Subtract VY. Set VF=0")
+				mu8.Regs[regX] -= mu8.Regs[regY]
+				fmt.Println("Subtract VY. Set carry flag ")
 			default:
 				fmt.Fprintf(os.Stderr, "error: unknown byte: [0x%.2x] (0x80)\n", program[ip+1])
 			}
@@ -174,6 +186,8 @@ cycle:
 				}
 
 				fmt.Printf("Display byte pattern: I=0x%.4x, %v\n", mu8.I, mu8.Mem[mu8.I:][:n])
+				draw_fb()
+				// fmt.Println("--------------------------------")
 			}
 		case 0xe0:
 			switch program[ip+1] {
@@ -272,9 +286,23 @@ cycle:
 					fmt.Println()
 				}
 			case 0x55:
-				fmt.Println("Store V0-VX at I")
+				if int(h1+1) != len(mu8.Mem[mu8.I:][:h1+1]) {
+					fmt.Fprintf(os.Stderr, "error: unequal lengths\n")
+					os.Exit(1)
+				}
+
+				copy(program[mu8.I:][:h1+1], mu8.Regs[:h1+1])
+				fmt.Println("Store V0-VX at I:", mu8.Regs[:h1+1], program[mu8.I:][:h1+1])
+				mu8.I += uint16(h1 + 1)
 			case 0x65:
-				fmt.Println("Load V0-VX at I")
+				if int(h1+1) != len(mu8.Mem[mu8.I:][:h1+1]) {
+					fmt.Fprintf(os.Stderr, "error: unequal lengths\n")
+					os.Exit(1)
+				}
+
+				copy(mu8.Regs[:h1+1], program[mu8.I:][:h1+1])
+				fmt.Println("Load V0-VX at I:", mu8.Regs[:h1+1], program[mu8.I:][:h1+1])
+				mu8.I += uint16(h1 + 1)
 			case 0x70:
 				fmt.Println("Send data in VX")
 			case 0x71:
