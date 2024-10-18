@@ -34,21 +34,28 @@ func initMu8() Mu8 {
 	}
 }
 
+const (
+	FONT_DATA_BASE_ADDRESS uint16 = 0x50
+	PROGRAM_ADDRESS_OFFSET uint   = 0x0200
+)
+
 func (mu8 *Mu8) loadRom(rom []uint8) {
 	if len(rom)&0b100 != 0 {
 		fmt.Fprintf(os.Stderr, "warning: possibly faulty ROM\n")
 	}
-	copy(mu8.Mem[0x200:], rom)
+	fmt.Printf("ROM size=0x%.4x\n", len(rom))
+
+	copy(mu8.Mem[FONT_DATA_BASE_ADDRESS:][:len(ds)], ds)
+	copy(mu8.Mem[PROGRAM_ADDRESS_OFFSET:], rom)
 }
 
 func (mu8 *Mu8) interpretRom() {
-	program := mu8.Mem[0x0200:]
-	sz := uint(len(program))
+	program := mu8.Mem[:]
 
 	var code uint8
 	var ip uint
 cycle:
-	for ip = 0; ip < sz; ip += 2 {
+	for ip = PROGRAM_ADDRESS_OFFSET; ip < uint(len(mu8.Mem)); ip += 2 {
 		code = program[ip]
 		h1 := code & 0x0f
 		l := program[ip+1]
@@ -72,15 +79,15 @@ cycle:
 				break cycle
 			}
 		case 0x10:
-			ip = uint((h1<<0x08)|l) - 0x0200
-			fmt.Println("Jump")
+			ip = uint((uint16(h1) << 0x08) | uint16(l))
+			fmt.Printf("Jump: 0x%.4x\n", ip)
 		case 0x20:
 			mu8.ReturnStack[mu8.retptr] = ip
 			mu8.retptr += 1
 
 			pre_ip := ip
-			ip = uint((h1<<0x08)|l) - 0x0200
-			fmt.Printf("Call: 0x%.4x[0x%.4x]\n", ip, pre_ip)
+			ip = uint((uint16(h1) << 0x08) | uint16(l))
+			fmt.Printf("Call: 0x%.4x [0x%.4x]\n", ip, pre_ip)
 		case 0x30:
 			fmt.Println("Skip = KK")
 		case 0x40:
@@ -135,7 +142,7 @@ cycle:
 			mu8.I = (uint16(h1) << 0x08) | uint16(l)
 			fmt.Printf("Set Mem Pointer: 0x%.4x\n", mu8.I)
 		case 0xb0:
-			ip = uint((h1<<0x08)|l) - 0x0200 + uint(mu8.Regs[0x00])
+			ip = uint((uint16(h1)<<0x08)|uint16(l)) + uint(mu8.Regs[0x00])
 			fmt.Println("Jump to Mem Addr + V0")
 		case 0xc0:
 			fmt.Println("Get random byte. AND with KK")
@@ -145,7 +152,8 @@ cycle:
 				y := int(mu8.Regs[l0])
 				n := l1
 
-				sprite := program[mu8.I-0x0200:][:n]
+				// TODO: track where the I register is set
+				sprite := mu8.Mem[mu8.I:][:n]
 				changed_px := draw_sprite_at(sprite, x, y)
 
 				mu8.Regs[0x0f] = 0x00
@@ -153,7 +161,7 @@ cycle:
 					mu8.Regs[0x0f] = 0x01
 				}
 
-				fmt.Println("Display byte pattern")
+				fmt.Printf("Display byte pattern: I=0x%.4x, %v\n", mu8.I, mu8.Mem[mu8.I:][:n])
 			}
 		case 0xe0:
 			switch program[ip+1] {
@@ -181,10 +189,11 @@ cycle:
 			case 0x18:
 				fmt.Println("Set Tone")
 			case 0x1e:
-				mu8.I += uint16(mu8.Regs[code&0x0f])
+				mu8.I += uint16(mu8.Regs[h1])
 				fmt.Println("Add to Mem Pointer")
 			case 0x29:
-				fmt.Println("Set Pointer to show VX")
+				mu8.I = FONT_DATA_BASE_ADDRESS + uint16(0x05*mu8.Regs[h1])
+				fmt.Printf("Set Pointer to show VX: I=0x%.4x\n", mu8.I)
 			case 0x33:
 				fmt.Println("Store 3-digit decimal")
 			case 0x55:
