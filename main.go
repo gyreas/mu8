@@ -78,14 +78,13 @@ cycle:
 				}
 				ip = mu8.ReturnStack[mu8.retptr] + 2 // goto next instruction after caller
 				fmt.Printf("Return: 0x%.4x\n", ip)
-				break cycle
 			}
 		case 0x10:
 			ip = uint((uint16(h1) << 0x08) | uint16(l))
 			fmt.Printf("Jump: 0x%.4x\n", ip)
 		case 0x20:
 			mu8.ReturnStack[mu8.retptr] = ip
-			mu8.retptr += 1
+			mu8.retptr += 1 //update the return stack ptr
 
 			pre_ip := ip
 			ip = uint((uint16(h1) << 0x08) | uint16(l))
