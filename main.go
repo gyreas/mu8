@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"io/fs"
 	"os"
@@ -166,9 +167,43 @@ cycle:
 		case 0xe0:
 			switch program[ip+1] {
 			case 0x9e:
-				fmt.Println("Skip keydown = VX")
+				{ // TODO: Implement keyboard input polling
+					reader := bufio.NewReader(os.Stdin)
+					b, err := reader.ReadByte()
+					if err != nil {
+						fmt.Fprintf(os.Stderr, "error: %s\n", err)
+						os.Exit(1)
+					}
+
+					if ('0' <= b && b <= '9') || ('a' <= b && b <= 'f') {
+						if mu8.Regs[h1] == b {
+							ip += 2
+						}
+						fmt.Println("Input hex", b)
+					} else {
+						ip -= 2
+					}
+					fmt.Printf("Skip keydown 0x%.2x = VX\n", b)
+				}
 			case 0xa1:
-				fmt.Println("Skip keydown != VX")
+				{ // TODO: Implement keyboard input polling
+					reader := bufio.NewReader(os.Stdin)
+					b, err := reader.ReadByte()
+					if err != nil {
+						fmt.Fprintf(os.Stderr, "error: %s\n", err)
+						os.Exit(1)
+					}
+
+					if ('0' <= b && b <= '9') || ('a' <= b && b <= 'f') {
+						if mu8.Regs[h1] != b {
+							ip += 2
+						}
+						fmt.Println("Input hex", b)
+					} else {
+						ip -= 2
+					}
+					fmt.Printf("Skip keydown 0x%.2x != VX\n", b)
+				}
 			default:
 				fmt.Fprintf(os.Stderr, "error: unknown byte: [0x%.2x] (0xe0)\n", program[ip+1])
 			}
@@ -181,7 +216,21 @@ cycle:
 			case 0x07:
 				fmt.Println("Timer")
 			case 0x0a:
-				fmt.Println("Input hex")
+				{ // TODO: Implement keyboard input polling
+					reader := bufio.NewReader(os.Stdin)
+					b, err := reader.ReadByte()
+					if err != nil {
+						fmt.Fprintf(os.Stderr, "error: %s\n", err)
+						os.Exit(1)
+					}
+
+					if ('0' <= b && b <= '9') || ('a' <= b && b <= 'f') {
+						mu8.Regs[h1] = b
+						fmt.Println("Input hex", b)
+					} else {
+						ip -= 2
+					}
+				}
 			case 0x15:
 				fmt.Println("Set Time")
 			case 0x17:
