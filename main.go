@@ -18,7 +18,7 @@ type Mu8 struct {
 	 * 0100  –  01F   Display
 	 * 0200  –  0FFF  Program area
 	 */
-	Mem         [2048]uint8
+	Mem         [4096]uint8
 	Regs        [16]uint8 /* V0-VF */
 	ReturnStack [64]uint  /* Subroutine Call Stack */
 	retptr      int       /* Call stack pointer */
@@ -29,7 +29,7 @@ func initMu8() Mu8 {
 
 	return Mu8{
 		I:           0,
-		Mem:         [2048]uint8{},
+		Mem:         [4096]uint8{},
 		Regs:        [16]uint8{},
 		ReturnStack: [64]uint{},
 		retptr:      0,
@@ -187,7 +187,7 @@ cycle:
 
 				logger.Printf("Display byte pattern: I=0x%.4x, %v\n", mu8.I, mu8.Mem[mu8.I:][:n])
 				draw_fb()
-				// fmt.Println("--------------------------------")
+				// logger.Println("--------------------------------")
 			}
 		case 0xe0:
 			switch program[ip+1] {
