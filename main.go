@@ -1,9 +1,9 @@
 package main
 
 import (
-	"bufio"
 	"crypto/rand"
 	"fmt"
+	"golang.org/x/term"
 	"io/fs"
 	"os"
 )
@@ -192,40 +192,30 @@ cycle:
 		case 0xe0:
 			switch program[ip+1] {
 			case 0x9e:
-				{ // TODO: Implement keyboard input polling
-					reader := bufio.NewReader(os.Stdin)
-					b, err := reader.ReadByte()
-					if err != nil {
-						fmt.Fprintf(os.Stderr, "error: %s\n", err)
-						os.Exit(1)
-					}
-
-					if ('0' <= b && b <= '9') || ('a' <= b && b <= 'f') {
-						if mu8.Regs[h1] == b {
-							ip += 2
-						}
-						fmt.Println("Input hex", b)
+				{
+					b, ishex := read_hex_key()
+					if ishex {
+						mu8.Regs[h1] = b
+						logger.Printf("Input hex: [%c] 0x%.2x\n", b, b)
 					} else {
 						ip -= 2
+						if b == 3 || b == 4 {
+							break cycle
+						}
 					}
 					logger.Printf("Skip keydown 0x%.2x = 0x%.2x\n", b, mu8.Regs[h1])
 				}
 			case 0xa1:
-				{ // TODO: Implement keyboard input polling
-					reader := bufio.NewReader(os.Stdin)
-					b, err := reader.ReadByte()
-					if err != nil {
-						fmt.Fprintf(os.Stderr, "error: %s\n", err)
-						os.Exit(1)
-					}
-
-					if ('0' <= b && b <= '9') || ('a' <= b && b <= 'f') {
-						if mu8.Regs[h1] != b {
-							ip += 2
-						}
-						fmt.Println("Input hex", b)
+				{
+					b, ishex := read_hex_key()
+					if ishex {
+						mu8.Regs[h1] = b
+						logger.Printf("Input hex: [%c] 0x%.2x\n", b, b)
 					} else {
 						ip -= 2
+						if b == 3 || b == 4 {
+							break cycle
+						}
 					}
 					logger.Printf("Skip keydown 0x%.2x != 0x%.2x\n", b, mu8.Regs[h1])
 				}
@@ -241,19 +231,16 @@ cycle:
 			case 0x07:
 				logger.Println("Timer")
 			case 0x0a:
-				{ // TODO: Implement keyboard input polling
-					reader := bufio.NewReader(os.Stdin)
-					b, err := reader.ReadByte()
-					if err != nil {
-						fmt.Fprintf(os.Stderr, "error: %s\n", err)
-						os.Exit(1)
-					}
-
-					if ('0' <= b && b <= '9') || ('a' <= b && b <= 'f') {
+				{
+					b, ishex := read_hex_key()
+					if ishex {
 						mu8.Regs[h1] = b
-						fmt.Println("Input hex", b)
+						logger.Printf("Input hex: [%c] 0x%.2x\n", b, b)
 					} else {
 						ip -= 2
+						if b == 3 || b == 4 {
+							break cycle
+						}
 					}
 				}
 			case 0x15:
@@ -350,3 +337,42 @@ func main() {
 
 }
 
+func getch() byte {
+	state0, err := term.MakeRaw(int(os.Stdin.Fd()))
+	if err != nil {
+		panic(err)
+	}
+
+	var buf [1]byte
+	_, err = os.Stdin.Read(buf[:])
+	if err != nil {
+		term.Restore(int(os.Stdin.Fd()), state0)
+		panic(err)
+	}
+	term.Restore(int(os.Stdin.Fd()), state0)
+	return buf[0]
+}
+
+func read_hex_key() (uint8, bool) {
+	fmt.Printf(":> ")
+
+	b := getch()
+	fmt.Printf("%c\n", b)
+
+	switch b {
+	case 3:
+		/* Ctrl-C */
+		fmt.Printf("^C")
+		return b, false
+
+	case 4:
+		/* Ctrl-D */
+		return b, false
+
+	default:
+		if ('0' <= b && b <= '9') || ('a' <= b && b <= 'f') {
+			return b, true
+		}
+	}
+	return 0, false
+}
