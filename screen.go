@@ -1,9 +1,14 @@
 package main
 
 import (
-	"fmt"
 	t "github.com/gdamore/tcell/v2"
 	"log"
+	"time"
+)
+
+const (
+	BORDER_WIDTH = 1
+	BORDER_PAD   = 2 * BORDER_WIDTH
 )
 
 func drawText(s t.Screen, start, end Vec2, style t.Style, text string) {
@@ -20,6 +25,15 @@ func drawText(s t.Screen, start, end Vec2, style t.Style, text string) {
 			break
 		}
 	}
+}
+
+type Display struct {
+	fb     Fb
+	fbpos  Vec2
+	screen t.Screen
+	sEvent chan t.Event
+	spin   chan rune
+	stop   chan struct{}
 }
 
 func drawBorder(s t.Screen) {
@@ -43,8 +57,6 @@ func drawBorder(s t.Screen) {
 }
 
 func main() {
-	defStyle := t.StyleDefault.Background(t.ColorReset).Foreground(t.ColorReset)
-
 	// Initialize screen
 	s, err := t.NewScreen()
 	{
@@ -66,9 +78,6 @@ func main() {
 		}
 	}
 
-	buf := NewFb(FB_WIDTH, FB_HEIGHT)
-	buf.drawDigits(Vec2{0, 0})
-
 	quit := func() {
 		// You have to catch panics in a defer, clean up, and
 		// re-raise them - otherwise your application can
@@ -82,49 +91,104 @@ func main() {
 	}
 	defer quit()
 
+	D := Display{
+		screen: s,
+		fb:     NewFb(FB_WIDTH, FB_HEIGHT),
+		fbpos:  Vec2{1, 1},
+		spin:   make(chan rune),
+		sEvent: make(chan t.Event),
+		stop:   make(chan struct{}),
+	}
+
 	// Initial draw
 	{
+		defStyle := t.StyleDefault.Background(t.ColorReset).Foreground(t.ColorReset)
+		D.fb.drawDigit(4, D.fbpos)
+
 		s.SetStyle(defStyle)
 		s.EnableMouse()
 		s.EnablePaste()
 		s.Clear()
-		buf.renderToScreen(s, Vec2{1, 1})
+
+		D.fb.renderToScreen(s, D.fbpos)
 		drawBorder(s)
 	}
 
-	for {
-		s.Show()
-
-		ev := s.PollEvent()
-		switch ev := ev.(type) {
-		case *t.EventResize:
-			s.Clear()
-			drawBorder(s)
-			buf.renderToScreen(s, Vec2{1, 1})
-			s.Sync()
-		case *t.EventKey:
-			if ev.Key() == t.KeyEscape || ev.Key() == t.KeyCtrlC {
+	go spinner(&D)
+	go func(D *Display) {
+		for {
+			select {
+			case <-D.stop:
+				close(D.stop)
+				close(D.sEvent)
 				return
-			} else if ev.Key() == t.KeyCtrlL {
-				s.Sync()
+			default:
+				D.sEvent <- s.PollEvent()
 			}
-		case *t.EventMouse:
-			if ev.Buttons() == t.ButtonPrimary || ev.Buttons() == t.ButtonSecondary {
-				mx, my := ev.Position()
-				coord := fmt.Sprintf("(%d, %d)", mx, my)
-			inner: // move the coord so that pointer is pointing ', '
-				for i, c := range []rune(coord) {
-					if c == ' ' {
-						mx -= i
-						break inner
-					}
-				}
+		}
+	}(&D)
 
-				s.Clear()
-				drawBorder(s)
-				drawText(s, Vec2{mx, my}, Vec2{mx + len(coord), my}, defStyle, coord)
-				buf.renderToScreen(s, Vec2{1, 1})
+mainLoop:
+	for {
+		D.screen.Show()
+
+		if processEvent(&D) {
+			break mainLoop
+		}
+	}
+}
+
+func spinner(D *Display) {
+	ticker := time.NewTicker(1 * time.Millisecond)
+	spinnerStyles := []t.Style{
+		t.StyleDefault.Background(t.ColorReset).Foreground(t.ColorRed),
+		t.StyleDefault.Background(t.ColorReset).Foreground(t.ColorGreen),
+		t.StyleDefault.Background(t.ColorReset).Foreground(t.ColorBlue),
+		t.StyleDefault.Background(t.ColorReset).Foreground(t.ColorWhite),
+	}
+
+	for {
+		for i, c := range `-\|/` {
+			select {
+			case D.spin <- c:
+			case <-D.stop:
+				close(D.spin)
+				return
+			default:
+				D.screen.SetContent(2, 1, c, nil, spinnerStyles[i])
+				D.screen.Show()
+			}
+
+			ticker.Reset(111 * time.Millisecond)
+			for {
+				<-ticker.C
+				ticker.Stop()
+				break
 			}
 		}
 	}
+}
+
+func processEvent(D *Display) bool {
+	s := D.screen
+	buf := D.fb
+	fbpos := D.fbpos
+
+	ev := <-D.sEvent
+	switch ev := ev.(type) {
+	case *t.EventResize:
+		s.Clear()
+		drawBorder(s)
+		buf.renderToScreen(s, fbpos)
+		s.Sync()
+	case *t.EventKey:
+		if ev.Key() == t.KeyEscape || ev.Key() == t.KeyCtrlC {
+			log.Printf("STOP\n")
+			D.stop <- struct{}{}
+			return true
+		} else if ev.Key() == t.KeyCtrlL {
+			s.Sync()
+		}
+	}
+	return false
 }
