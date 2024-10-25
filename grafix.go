@@ -58,10 +58,10 @@ func NewFb(w, h int) Fb {
 	}
 }
 
-func (buf *Fb) drawSpriteAt(sprite []byte, ori Vec2) bool {
+func (buf *Fb) drawSpriteAt(sprite []byte, ori Vec2) uint8 {
 	x := ori.x
 	y := ori.y
-	collision := false
+	collision := uint8(0)
 	for _, b := range sprite {
 		// render the bytes starting from the first one
 		j := 0
@@ -70,7 +70,7 @@ func (buf *Fb) drawSpriteAt(sprite []byte, ori Vec2) bool {
 			i := (x % buf.w) + (y%buf.h)*buf.w
 			old_b := buf.buf[i]
 			new_b := (b & mask) >> (7 - j)
-			collision = (old_b ^ new_b) == 1
+			collision = old_b ^ new_b
 
 			buf.buf[i] = old_b ^ new_b
 
@@ -111,35 +111,6 @@ func (buf *Fb) drawDigits(ori Vec2) {
 	}
 }
 
-func (buf *Fb) renderToScreen(s t.Screen, ori Vec2) {
-	sw, sh := s.Size()
-	style := t.StyleDefault.Foreground(t.ColorSnow).Background(t.ColorReset)
-
-	for y := 0; y < buf.h; y++ {
-		for x := 0; x < buf.w; x++ {
-			r := CELL_FILLED
-			if buf.buf[y*buf.w+x] == 0 {
-				r = CELL_EMPTY
-			}
-
-			// respect the screen border
-			dx := ori.x + x
-			if dx == 0 {
-				dx += BORDER_WIDTH
-			}
-			if dx == sw-1 {
-				dx -= BORDER_WIDTH
-			}
-
-			dy := ori.y + y
-			if dy == 0 {
-				dy += BORDER_WIDTH
-			}
-			if dy == sh-1 {
-				dy -= BORDER_WIDTH
-			}
-
-			s.SetContent(dx, dy, r, nil, style)
 		}
 	}
 }

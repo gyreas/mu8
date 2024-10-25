@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"os"
 )
 
@@ -20,7 +21,8 @@ var ibm_logo []uint8 = []uint8{
 }
 
 type Mu8 struct {
-	cpu Cpu
+	cpu   Cpu
+	video Display
 
 	romsz int
 }
@@ -30,21 +32,62 @@ func (Mu8 *Mu8) load_rom(rom []uint8) {
 	Mu8.romsz = len(rom)
 }
 
+const debug = false
+
 func main() {
-	fmt.Println("Mu8! go!")
+	log.Println("Mu8! go!")
 
 	Mu8 := Mu8{}
 	Mu8.load_rom(ibm_logo)
 
+	video := NewDisplay()
+
+	go video.startRenderLoop()
+	defer video.handleQuit()
+
 	cpu := Mu8.cpu
+	cpu.sprite = nil
 	cpu.ip = PROGRAM_ADDRESS_OFFSET
+
+cycle:
 	for cpu.ip < MEMORY_SIZE {
+
 		inst := cpu.fetch()
-		logmsg("%.4x | ", cpu.ip-2)
+		logmsg("%.4x | [%.4x] ", cpu.ip-2, inst)
+
 		cpu.decode_execute(&Mu8, inst)
+
+		if cpu.sprite != nil {
+			x := int(cpu.sprite[0])
+			y := int(cpu.sprite[1])
+			pos := Vec2{x, y}
+
+			video.smu.Lock()
+			cpu.R[0x0f] = video.fb.drawSpriteAt(cpu.sprite[2:], pos)
+			video.smu.Unlock()
+			video.ping <- Ping
+
+			logmsg("Rendered FB from Cpu\n")
+
+			// invalidate the data
+			cpu.sprite = nil
+
+		}
+
+		select {
+		case <-video.quit:
+			close(video.quit)
+			break cycle
+		default:
+			continue
+		}
 	}
 }
 
 func logmsg(format string, args ...any) {
+	if !debug {
+		return
+	}
+
 	fmt.Fprintf(os.Stderr, format, args...)
 }

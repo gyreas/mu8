@@ -1,7 +1,8 @@
 build: mu8
 
 mu8:
-    go build -o mu8 Mu8.go cpu.go memory.go
+    go build -race -o mu8 Mu8.go cpu.go memory.go screen.go grafix.go
+    ./mu8
 
 tcell:
     go build -o gfx screen.go grafix.go

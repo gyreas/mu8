@@ -10,6 +10,8 @@ type Cpu struct {
 	i  uint16
 	M  [MEMORY_SIZE]uint8
 
+	sprite []uint8
+
 	R [16]uint8
 
 	sp int
@@ -28,8 +30,8 @@ func (cpu *Cpu) decode_execute(Mu8 *Mu8, inst uint16) {
 	high := uint8(inst >> 0x08)
 	low := uint8(inst & 0x00ff)
 	nnn := inst & 0x0fff
+	x := high & 0x0f
 	y := low >> 0x04
-	x := high >> 0x04
 	kk := low
 	n := low & 0x0f
 
@@ -50,7 +52,7 @@ func (cpu *Cpu) decode_execute(Mu8 *Mu8, inst uint16) {
 	case 0x1:
 		cpu.ip = int(nnn)
 		logmsg("JUMP -> 0x%.4x\n", cpu.ip)
-		os.Exit(1)
+		// os.Exit(1)
 	case 0x2:
 		/* cpu.ip is the return address because `fetch()` */
 		cpu.S[cpu.sp] = uint16(cpu.ip)
@@ -139,9 +141,15 @@ func (cpu *Cpu) decode_execute(Mu8 *Mu8, inst uint16) {
 		{
 			cx := int(cpu.R[x])
 			cy := int(cpu.R[y])
-			// TODO: track where the I register is set
 			// TODO: Set a flag to update the frame buffer here
-			logmsg("DRAW V%d, V%d, %d bytes\n", cx, cy, n)
+			logmsg("DRAW (0x%.4x) V%.1x(%d), V%.1x(%d), %d bytes\n", cpu.i, x, cx, y, cy, n)
+
+			cpu.sprite = make([]uint8, 2)
+			cpu.sprite[0] = uint8(cx)
+			cpu.sprite[1] = uint8(cy)
+			cpu.sprite = append(cpu.sprite, cpu.M[cpu.i:][:n]...)
+
+			logmsg("Sprite: %v\n", cpu.sprite)
 		}
 	case 0xe:
 		switch low {
