@@ -24,8 +24,8 @@ type Display struct {
 	fbpos  Vec2
 	sEvent chan t.Event
 	resize chan struct{}
-	ping   chan struct{}
 	quit   chan struct{}
+	clear  chan struct{}
 }
 
 func NewDisplay() Display {
@@ -56,7 +56,8 @@ func NewDisplay() Display {
 		fbpos: Vec2{BORDER_PAD, BORDER_PAD},
 
 		sEvent: make(chan t.Event),
-		ping:   make(chan struct{}),
+		key:    make(chan uint8, 16),
+		sEvent: make(chan t.Event, 44),
 		resize: make(chan struct{}, 1),
 		quit:   make(chan struct{}, 1),
 	}
@@ -119,10 +120,9 @@ func (dp *Display) startRenderLoop() {
 	for {
 
 		dp.screen.Show()
+
 		select {
-		case <-dp.quit:
-			return
-		case <-dp.ping:
+		case <-dp.clear:
 			dp.smu.Lock()
 			dp.renderFb()
 			dp.smu.Unlock()
@@ -221,6 +221,7 @@ func (dp *Display) spinner() {
 		t.StyleDefault.Background(t.ColorReset).Foreground(t.ColorBlue),
 		t.StyleDefault.Background(t.ColorReset).Foreground(t.ColorWhite),
 	}
+	lstyles := len(spinnerStyles)
 
 	spinners := `←↖↑↗→↘↓↙`
 
@@ -233,7 +234,7 @@ func (dp *Display) spinner() {
 			default:
 				dp.smu.Lock()
 				sw, _ := dp.screen.Size()
-				dp.screen.SetContent(sw-4, 2, c, nil, spinnerStyles[i%len(spinnerStyles)])
+				dp.screen.SetContent(sw-4, 2, c, nil, spinnerStyles[i%lstyles])
 				dp.screen.Show()
 				dp.smu.Unlock()
 			}

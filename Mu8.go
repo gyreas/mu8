@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"time"
 )
 
 var ibm_logo []uint8 = []uint8{
@@ -19,6 +20,7 @@ var ibm_logo []uint8 = []uint8{
 	0xbf, 0x00, 0xfb, 0x00, 0xf3, 0x00, 0xe3, 0x00, 0x43, 0xe0, 0x00, 0xe0,
 	0x00, 0x80, 0x00, 0x80, 0x00, 0x80, 0x00, 0x80, 0x00, 0xe0, 0x00, 0xe0,
 }
+const CPU_HZ = 16 * time.Millisecond
 
 type Mu8 struct {
 	cpu   Cpu
@@ -28,16 +30,18 @@ type Mu8 struct {
 }
 
 func (Mu8 *Mu8) load_rom(rom []uint8) {
-	copy(Mu8.cpu.M[PROGRAM_ADDRESS_OFFSET:][:len(rom)], rom)
+	copy(Mu8.cpu.M[PROGRAM_ADDRESS_OFFSET:], rom)
 	Mu8.romsz = len(rom)
 }
 
-const debug = false
+const debug = true
 
 func main() {
 	log.Println("Mu8! go!")
 
 	Mu8 := Mu8{}
+	Mu8.cpu = NewCpu()
+
 	Mu8.load_rom(ibm_logo)
 
 	video := NewDisplay()
@@ -46,8 +50,6 @@ func main() {
 	defer video.handleQuit()
 
 	cpu := Mu8.cpu
-	cpu.sprite = nil
-	cpu.ip = PROGRAM_ADDRESS_OFFSET
 
 cycle:
 	for cpu.ip < MEMORY_SIZE {
@@ -55,7 +57,7 @@ cycle:
 		inst := cpu.fetch()
 		logmsg("%.4x | [%.4x] ", cpu.ip-2, inst)
 
-		cpu.decode_execute(&Mu8, inst)
+		cpu.decode_execute(&Mu8, inst, video.clear)
 
 		if cpu.sprite != nil {
 			x := int(cpu.sprite[0])
@@ -64,8 +66,9 @@ cycle:
 
 			video.smu.Lock()
 			cpu.R[0x0f] = video.fb.drawSpriteAt(cpu.sprite[2:], pos)
+			video.renderFb()
+			video.screen.Show()
 			video.smu.Unlock()
-			video.ping <- Ping
 
 			logmsg("Rendered FB from Cpu\n")
 
@@ -79,7 +82,7 @@ cycle:
 			close(video.quit)
 			break cycle
 		default:
-			continue
+			<-time.After(CPU_HZ)
 		}
 	}
 }

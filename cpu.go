@@ -18,13 +18,23 @@ type Cpu struct {
 	S  [RETSTACK_SIZE]uint16
 }
 
+func NewCpu() Cpu {
+	cpu := Cpu{}
+	cpu.i = 0
+	cpu.ip = PROGRAM_ADDRESS_OFFSET
+	copy(cpu.M[FONT_DATA_OFFSET:][:len(Digits)], Digits)
+	cpu.sprite = nil
+
+	return cpu
+}
+
 func (cpu *Cpu) fetch() uint16 {
 	inst := uint16(cpu.M[cpu.ip])<<0x08 | uint16(cpu.M[cpu.ip+1])
 	cpu.ip += 2
 	return inst
 }
 
-func (cpu *Cpu) decode_execute(Mu8 *Mu8, inst uint16) {
+func (cpu *Cpu) decode_execute(Mu8 *Mu8, inst uint16, clear chan struct{}) {
 	mem := cpu.M
 
 	high := uint8(inst >> 0x08)
@@ -39,7 +49,9 @@ func (cpu *Cpu) decode_execute(Mu8 *Mu8, inst uint16) {
 	case 0x0:
 		switch kk {
 		case 0xe0:
-			// clear_fb()
+			select {
+			case clear <- struct{}{}:
+			}
 			logmsg("CLS\n")
 		case 0xee:
 			cpu.sp--
@@ -141,7 +153,7 @@ func (cpu *Cpu) decode_execute(Mu8 *Mu8, inst uint16) {
 		{
 			cx := int(cpu.R[x])
 			cy := int(cpu.R[y])
-			// TODO: Set a flag to update the frame buffer here
+
 			logmsg("DRAW (0x%.4x) V%.1x(%d), V%.1x(%d), %d bytes\n", cpu.i, x, cx, y, cy, n)
 
 			cpu.sprite = make([]uint8, 2)
@@ -150,6 +162,7 @@ func (cpu *Cpu) decode_execute(Mu8 *Mu8, inst uint16) {
 			cpu.sprite = append(cpu.sprite, cpu.M[cpu.i:][:n]...)
 
 			logmsg("Sprite: %v\n", cpu.sprite)
+			// os.Exit(1)
 		}
 	case 0xe:
 		switch low {
@@ -177,35 +190,30 @@ func (cpu *Cpu) decode_execute(Mu8 *Mu8, inst uint16) {
 			cpu.i += uint16(cpu.R[x])
 			logmsg("ADD I, V%d\n", x)
 		case 0x29:
-			cpu.i = FONT_DATA_BASE_ADDRESS + uint16(0x05*cpu.R[x])
-			logmsg("LD F, V%d\n", x)
+			cpu.i = FONT_DATA_OFFSET + uint16(0x05*cpu.R[x])
+			logmsg("LD F, V%d: %x\n", x, cpu.R[x])
 		case 0x33:
 			dx := cpu.R[x]
 			mem[cpu.i] = dx / 100
-			mem[cpu.i+1] = (dx / 100) % 10
-			mem[cpu.i+2] = dx / 100
-			logmsg("BCD V%d\n", x)
+			mem[cpu.i+1] = (dx / 10) % 10
+			mem[cpu.i+2] = dx % 10
+			logmsg("BCD (0x%.4x)%v V%d\n", cpu.i, mem[cpu.i:][:3], x)
+
+			logmsg("M:%+v\n\n", mem[PROGRAM_ADDRESS_OFFSET:])
 		case 0x55:
-			if int(x+1) != len(mem[cpu.i:][:x+1]) {
-				logmsg(
-					"error: unequal lengths: want: %d, got: %d\n",
-					int(x+1), len(mem[cpu.i:][:x+1]))
-				os.Exit(1)
-			}
 			copy(mem[cpu.i:][:x+1], cpu.R[:x+1])
-			logmsg("LD [I:], V%d\n", x)
-			cpu.i += uint16(x + 1)
+			logmsg("LD [I:], V%d: %v\n", x, cpu.R[:x+1])
+			// cpu.i += uint16(x + 1)
 		case 0x65:
-			if int(x+1) != len(mem[cpu.i:][:x+1]) {
-				logmsg(
-					"error: unequal lengths: want: %d, got: %d\n",
-					int(x+1), len(mem[cpu.i:][:x+1]))
-				os.Exit(1)
+			logmsg("LD V%d, [I(0x%.4x):]: %v/%v\n", x, cpu.i, cpu.R[:x+1], mem[cpu.i:][:x+1])
+			logmsg("M:%+v\n\n", mem[PROGRAM_ADDRESS_OFFSET:])
+			copy(cpu.R[:x+1], mem[cpu.i:][:x+1])
+			logmsg("M:%+v\n\n", mem[PROGRAM_ADDRESS_OFFSET:])
+			if q == 4 {
+				os.Exit(44)
 			}
 
-			copy(cpu.R[:x+1], mem[cpu.i:][:x+1])
-			logmsg("LD V%d, [I:]\n", x)
-			cpu.i += uint16(x + 1)
+			// cpu.i += uint16(x + 1)
 		default:
 			logmsg("error: unknown byte: [0x%.2x] (0xf0)\n", low)
 		}

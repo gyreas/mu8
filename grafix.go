@@ -111,6 +111,18 @@ func (buf *Fb) drawDigits(ori Vec2) {
 	}
 }
 
+func drawText(s t.Screen, start, end Vec2, style t.Style, text string) {
+	row := start.y
+	col := start.x
+	for _, r := range []rune(text) {
+		s.SetContent(col, row, r, nil, style)
+		col++
+		if col >= end.x {
+			row++
+			col = start.x
+		}
+		if row > end.y {
+			break
 		}
 	}
 }
