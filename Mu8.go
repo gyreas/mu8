@@ -88,7 +88,48 @@ func (Mu8 *Mu8) load_rom(rom []uint8) {
 	Mu8.romsz = len(rom)
 }
 
-const debug = false
+func (Mu8 *Mu8) Quit() {
+	Mu8.video.handleQuit()
+	if Mu8.profiling {
+		pprof.StopCPUProfile()
+		// let's assume it closes the file
+		log.Println("========= stop profiling of the app =========")
+	}
+}
+
+const debug = true
+
+func main() {
+	Mu8 := Mu8{}
+
+	handleFlags(&Mu8)
+	log.Println("Mu8! go!")
+
+	Mu8.cpu = NewCpu()
+	Mu8.video = NewDisplay()
+
+	Mu8.load_rom(random)
+	video := Mu8.video
+	cpu := Mu8.cpu
+
+	go video.startRenderLoop()
+	defer Mu8.Quit()
+cycle:
+	for cpu.ip < MEMORY_SIZE {
+		// collect key input for the next instruction that needs it
+		cpu.cycle(&Mu8, video.collide, video.key, video.echan)
+
+		select {
+		case ev := <-video.echan:
+			if ev.Kind == EventQuit {
+				logmsg("[cycle]: closing")
+				break cycle
+			}
+		default:
+			<-time.After(CPU_HZ)
+		}
+	}
+}
 
 func handleFlags(mu8 *Mu8) {
 	profiling := flag.Bool("profile", false, "enable CPU profiling")
@@ -104,83 +145,6 @@ func handleFlags(mu8 *Mu8) {
 		mu8.profiling = true
 		pprof.StartCPUProfile(mu8prof)
 		log.Println("======== started profiling of the app ========")
-	}
-}
-
-func main() {
-	Mu8 := Mu8{}
-
-	handleFlags(&Mu8)
-
-	log.Println("Mu8! go!")
-
-	Mu8.cpu = NewCpu()
-	Mu8.load_rom(ibm_logo)
-
-	video := NewDisplay()
-
-	go video.startRenderLoop()
-	defer func() {
-		video.handleQuit()
-
-		if Mu8.profiling {
-			pprof.StopCPUProfile()
-			// let's assume it closes the file
-			log.Println("========= stop profiling of the app =========")
-		}
-	}()
-
-	cpu := Mu8.cpu
-
-cycle:
-	for cpu.ip < MEMORY_SIZE {
-		// collect key input for the next instruction that needs it
-		if cpu.needs_key {
-			if cpu.pending_key == CHARM {
-				panic("pending shit")
-			}
-
-			logmsg("needs_key\n")
-			k := <-video.key
-			if 0x00 <= k && k <= 0x0f {
-				cpu.R[cpu.pending_key] = k
-				cpu.needs_key = false
-
-				logmsg("LD V%d, KEYPRESS: %x\n", cpu.pending_key, cpu.R[cpu.pending_key])
-				logmsg("[cycle]: got key: %d\n", cpu.R[cpu.pending_key])
-				cpu.pending_key = CHARM
-			}
-		}
-
-		inst := cpu.fetch()
-		logmsg("%.4x | [%.4x] \n", cpu.ip-2, inst)
-
-		cpu.decode_execute(&Mu8, inst)
-
-		if cpu.clear {
-			video.echan <- Event{Kind: EventClear}
-			cpu.clear = false
-		}
-
-		if cpu.sprite != nil {
-			video.echan <- Event{Kind: EventSprite, Sprite: cpu.sprite}
-			cpu.R[0x0f] = <-video.collide
-
-			logmsg("Rendered FB from Cpu\n")
-
-			// invalidate the data
-			cpu.sprite = nil
-		}
-
-		select {
-		case ev := <-video.echan:
-			if ev.Kind == EventQuit {
-				logmsg("[cycle]: closing")
-				break cycle
-			}
-		default:
-			<-time.After(CPU_HZ)
-		}
 	}
 }
 

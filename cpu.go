@@ -37,6 +37,46 @@ func (cpu *Cpu) fetch() uint16 {
 	return inst
 }
 
+func (cpu *Cpu) cycle(Mu8 *Mu8, collide, key <-chan uint8, echan chan<- Event) {
+	if cpu.needs_key {
+		if cpu.pending_key == CHARM {
+			panic("pending shit")
+		}
+
+		logmsg("needs_key\n")
+		k := <-key
+		if 0x00 <= k && k <= 0x0f {
+			cpu.R[cpu.pending_key] = k
+			cpu.needs_key = false
+
+			logmsg("LD V%d, KEYPRESS: %x\n", cpu.pending_key, cpu.R[cpu.pending_key])
+			logmsg("[cycle]: got key: %d\n", cpu.R[cpu.pending_key])
+			cpu.pending_key = CHARM
+		}
+	}
+
+	inst := cpu.fetch()
+	logmsg("%.4x | [%.4x] \n", cpu.ip-2, inst)
+
+	cpu.decode_execute(Mu8, inst)
+
+	if cpu.clear {
+		echan <- Event{Kind: EventClear}
+		cpu.clear = false
+	}
+
+	if cpu.sprite != nil {
+		echan <- Event{Kind: EventSprite, Sprite: cpu.sprite}
+		cpu.R[0x0f] = <-collide
+
+		logmsg("Rendered FB from Cpu\n")
+
+		// invalidate the data
+		cpu.sprite = nil
+	}
+
+}
+
 const CHARM = 0x44
 
 func (cpu *Cpu) decode_execute(Mu8 *Mu8, inst uint16) {
