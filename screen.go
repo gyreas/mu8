@@ -18,14 +18,16 @@ var (
 )
 
 type Display struct {
-	screen t.Screen
-	smu    sync.Mutex
-	fb     Fb
-	fbpos  Vec2
-	sEvent chan t.Event
-	resize chan struct{}
-	quit   chan struct{}
-	clear  chan struct{}
+	screen  t.Screen
+	smu     sync.Mutex
+	fb      Fb
+	fbpos   Vec2
+	key     chan uint8
+	sprite  chan []uint8
+	collide chan uint8
+	resize  chan struct{}
+	clear   chan struct{}
+	quit    chan struct{}
 }
 
 func NewDisplay() Display {
@@ -55,11 +57,12 @@ func NewDisplay() Display {
 		fb:    NewFb(FB_WIDTH, FB_HEIGHT),
 		fbpos: Vec2{BORDER_PAD, BORDER_PAD},
 
-		sEvent: make(chan t.Event),
-		key:    make(chan uint8, 16),
-		sEvent: make(chan t.Event, 44),
-		resize: make(chan struct{}, 1),
-		quit:   make(chan struct{}, 1),
+		key:     make(chan uint8, 1),
+		sprite:  make(chan []uint8),
+		collide: make(chan uint8),
+		resize:  make(chan struct{}),
+		clear:   make(chan struct{}),
+		quit:    make(chan struct{}),
 	}
 	dp.drawBorder()
 
@@ -114,30 +117,48 @@ func (dp *Display) startRenderLoop() {
 	sw, sh := dp.screen.Size()
 	log.Printf("Screen: %dx%d\n", sw, sh)
 
-	go dp.spinner()
+	// spinner shit
+	// spinnerStyles := []t.Style{
+	// 	t.StyleDefault.Background(t.ColorReset).Foreground(t.ColorRed),
+	// 	t.StyleDefault.Background(t.ColorReset).Foreground(t.ColorGreen),
+	// 	t.StyleDefault.Background(t.ColorReset).Foreground(t.ColorBlue),
+	// 	t.StyleDefault.Background(t.ColorReset).Foreground(t.ColorWhite),
+	// }
+	// lstyles := len(spinnerStyles)
+	// spinners := `←↖↑↗→↘↓↙`
+	// len_spinners := len(spinners)
+
 	go dp.pollEvent()
 
+renderloop:
 	for {
-
-		dp.screen.Show()
-
 		select {
+		case <-dp.quit:
+			log.Println("LoopQuit::")
+			close(dp.key)
+			close(dp.quit)
+			break renderloop
 		case <-dp.clear:
-			dp.smu.Lock()
+			clear(dp.fb.buf)
 			dp.renderFb()
-			dp.smu.Unlock()
+			dp.screen.Show()
+		case sprite := <-dp.sprite:
+			x := int(sprite[0])
+			y := int(sprite[1])
+			dp.collide <- dp.fb.drawSpriteAt(sprite[2:], Vec2{x, y})
+			dp.renderFb()
+			dp.screen.Show()
 		case <-dp.resize:
-			dp.smu.Lock()
 			dp.handleResize()
 			sw, sh := dp.screen.Size()
 			log.Printf("Resized to: %dx%d\n", sw, sh)
-			dp.smu.Unlock()
+
 		default:
-			if dp.handleEvent() {
-				return
-			}
 		}
+		time.Sleep(16 * time.Millisecond)
 	}
+
+	log.Println("Done")
 }
 
 // This async'ly polls events from the window and other sources. It also emits
@@ -145,45 +166,48 @@ func (dp *Display) startRenderLoop() {
 //
 // Thus, it must be it's own Goroutine
 func (dp *Display) pollEvent() {
+	s := dp.screen
+
 	for {
-		select {
-		case <-dp.quit:
-			return
+		ev := s.PollEvent()
+		switch ev := ev.(type) {
+		case *t.EventResize:
+			log.Printf("EventResize::")
+			dp.resize <- Resize
+
+		case *t.EventKey:
+			log.Println("EventKey::")
+			if ev.Key() == t.KeyEscape || ev.Key() == t.KeyCtrlC {
+				log.Printf("stopping\n")
+				dp.quit <- Ping
+				log.Printf("STOP\n")
+				return
+			} else if ev.Key() == t.KeyRune {
+				logmsg("rune\n")
+				key := uint8(ev.Rune())
+				if '0' <= key && key <= '9' {
+					logmsg("key 0-9: %c/%d\n", key, key-'0')
+					dp.key <- key - '0'
+				} else if 'a' <= key && key <= 'f' {
+					logmsg("key a-f: %c/%d\n", key, 0xa+key-'a')
+					dp.key <- 0xa + key - 'a'
+				}
+			}
 		default:
-			dp.sEvent <- dp.screen.PollEvent()
 		}
 	}
 }
 
 func (dp *Display) handleResize() {
+	log.Println("to resize")
 	dp.screen.Clear()
-	// dp.screen.Sync()
 	dp.drawBorder()
 	dp.renderFb()
 	dp.screen.Sync()
 }
 
-func (dp *Display) handleEvent() bool {
-	s := dp.screen
-
-	ev := <-dp.sEvent
-	switch ev := ev.(type) {
-	case *t.EventResize:
-		dp.resize <- Resize
-	case *t.EventKey:
-		if ev.Key() == t.KeyEscape || ev.Key() == t.KeyCtrlC {
-			log.Printf("stopping\n")
-			dp.quit <- Ping
-			log.Printf("STOP\n")
-			return true
-		} else if ev.Key() == t.KeyCtrlL {
-			s.Sync()
-		}
-	}
-	return false
-}
-
 func (dp *Display) handleQuit() {
+	log.Println("Quit::")
 	maybePanic := recover()
 	dp.screen.Clear()
 	dp.screen.Fini()
@@ -211,35 +235,4 @@ func (dp *Display) drawBorder() {
 	s.SetContent(w-1, 0, BORDER_RIGHT_TOP, nil, style)
 	s.SetContent(0, h-1, BORDER_LEFT_BOTTOM, nil, style)
 	s.SetContent(w-1, h-1, BORDER_RIGHT_BOTTOM, nil, style)
-}
-
-// This merely displays a unadorned spinner
-func (dp *Display) spinner() {
-	spinnerStyles := []t.Style{
-		t.StyleDefault.Background(t.ColorReset).Foreground(t.ColorRed),
-		t.StyleDefault.Background(t.ColorReset).Foreground(t.ColorGreen),
-		t.StyleDefault.Background(t.ColorReset).Foreground(t.ColorBlue),
-		t.StyleDefault.Background(t.ColorReset).Foreground(t.ColorWhite),
-	}
-	lstyles := len(spinnerStyles)
-
-	spinners := `←↖↑↗→↘↓↙`
-
-	time.Sleep(44 * time.Millisecond)
-	for {
-		for i, c := range spinners {
-			select {
-			case <-dp.quit:
-				return
-			default:
-				dp.smu.Lock()
-				sw, _ := dp.screen.Size()
-				dp.screen.SetContent(sw-4, 2, c, nil, spinnerStyles[i%lstyles])
-				dp.screen.Show()
-				dp.smu.Unlock()
-			}
-
-			time.Sleep(644 * time.Millisecond)
-		}
-	}
 }

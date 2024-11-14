@@ -81,6 +81,7 @@ func (buf *Fb) drawSpriteAt(sprite []byte, ori Vec2) uint8 {
 		x = ori.x
 		y++
 	}
+	logmsg("Drew sprite %v at %v\n", sprite, ori)
 
 	return collision
 }

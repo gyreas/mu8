@@ -2,7 +2,6 @@ package main
 
 import (
 	"math/rand"
-	"os"
 )
 
 type Cpu struct {
@@ -11,6 +10,10 @@ type Cpu struct {
 	M  [MEMORY_SIZE]uint8
 
 	sprite []uint8
+
+	pending_key uint8
+	needs_key   bool
+	clear       bool
 
 	R [16]uint8
 
@@ -34,8 +37,12 @@ func (cpu *Cpu) fetch() uint16 {
 	return inst
 }
 
-func (cpu *Cpu) decode_execute(Mu8 *Mu8, inst uint16, clear chan struct{}) {
-	mem := cpu.M
+const CHARM = 0x44
+
+func (cpu *Cpu) decode_execute(Mu8 *Mu8, inst uint16) {
+	logmsg("pending: %v\n", cpu.pending_key)
+
+	mem := &cpu.M
 
 	high := uint8(inst >> 0x08)
 	low := uint8(inst & 0x00ff)
@@ -49,9 +56,7 @@ func (cpu *Cpu) decode_execute(Mu8 *Mu8, inst uint16, clear chan struct{}) {
 	case 0x0:
 		switch kk {
 		case 0xe0:
-			select {
-			case clear <- struct{}{}:
-			}
+			cpu.clear = true
 			logmsg("CLS\n")
 		case 0xee:
 			cpu.sp--
@@ -162,7 +167,6 @@ func (cpu *Cpu) decode_execute(Mu8 *Mu8, inst uint16, clear chan struct{}) {
 			cpu.sprite = append(cpu.sprite, cpu.M[cpu.i:][:n]...)
 
 			logmsg("Sprite: %v\n", cpu.sprite)
-			// os.Exit(1)
 		}
 	case 0xe:
 		switch low {
@@ -181,7 +185,9 @@ func (cpu *Cpu) decode_execute(Mu8 *Mu8, inst uint16, clear chan struct{}) {
 		case 0x07:
 			logmsg("LD V%d, DT\n", x)
 		case 0x0a:
-			logmsg("LD V%d, KEYPRESS\n", x)
+			logmsg("----- x: '%c' ----\n", x)
+			cpu.pending_key = x
+			cpu.needs_key = true
 		case 0x15:
 			logmsg("LD DT,  V%d\n", x)
 		case 0x18:
@@ -198,22 +204,14 @@ func (cpu *Cpu) decode_execute(Mu8 *Mu8, inst uint16, clear chan struct{}) {
 			mem[cpu.i+1] = (dx / 10) % 10
 			mem[cpu.i+2] = dx % 10
 			logmsg("BCD (0x%.4x)%v V%d\n", cpu.i, mem[cpu.i:][:3], x)
-
-			logmsg("M:%+v\n\n", mem[PROGRAM_ADDRESS_OFFSET:])
 		case 0x55:
 			copy(mem[cpu.i:][:x+1], cpu.R[:x+1])
 			logmsg("LD [I:], V%d: %v\n", x, cpu.R[:x+1])
-			// cpu.i += uint16(x + 1)
+			cpu.i += uint16(x + 1)
 		case 0x65:
 			logmsg("LD V%d, [I(0x%.4x):]: %v/%v\n", x, cpu.i, cpu.R[:x+1], mem[cpu.i:][:x+1])
-			logmsg("M:%+v\n\n", mem[PROGRAM_ADDRESS_OFFSET:])
 			copy(cpu.R[:x+1], mem[cpu.i:][:x+1])
-			logmsg("M:%+v\n\n", mem[PROGRAM_ADDRESS_OFFSET:])
-			if q == 4 {
-				os.Exit(44)
-			}
-
-			// cpu.i += uint16(x + 1)
+			cpu.i += uint16(x + 1)
 		default:
 			logmsg("error: unknown byte: [0x%.2x] (0xf0)\n", low)
 		}
