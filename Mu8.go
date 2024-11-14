@@ -1,9 +1,11 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"log"
 	"os"
+	"runtime/pprof"
 	"time"
 )
 
@@ -75,10 +77,10 @@ var (
 )
 
 type Mu8 struct {
-	cpu   Cpu
-	video Display
-
-	romsz int
+	cpu       Cpu
+	video     Display
+	romsz     int
+	profiling bool
 }
 
 func (Mu8 *Mu8) load_rom(rom []uint8) {
@@ -86,20 +88,47 @@ func (Mu8 *Mu8) load_rom(rom []uint8) {
 	Mu8.romsz = len(rom)
 }
 
-const debug = true
+const debug = false
+
+func handleFlags(mu8 *Mu8) {
+	profiling := flag.Bool("profile", false, "enable CPU profiling")
+
+	flag.Parse()
+
+	if *profiling {
+		mu8prof, err := os.Create("mu8.prof")
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		mu8.profiling = true
+		pprof.StartCPUProfile(mu8prof)
+		log.Println("======== started profiling of the app ========")
+	}
+}
 
 func main() {
+	Mu8 := Mu8{}
+
+	handleFlags(&Mu8)
+
 	log.Println("Mu8! go!")
 
-	Mu8 := Mu8{}
 	Mu8.cpu = NewCpu()
-
 	Mu8.load_rom(ibm_logo)
 
 	video := NewDisplay()
 
 	go video.startRenderLoop()
-	defer video.handleQuit()
+	defer func() {
+		video.handleQuit()
+
+		if Mu8.profiling {
+			pprof.StopCPUProfile()
+			// let's assume it closes the file
+			log.Println("========= stop profiling of the app =========")
+		}
+	}()
 
 	cpu := Mu8.cpu
 
@@ -110,6 +139,7 @@ cycle:
 			if cpu.pending_key == CHARM {
 				panic("pending shit")
 			}
+
 			logmsg("needs_key\n")
 			k := <-video.key
 			if 0x00 <= k && k <= 0x0f {
