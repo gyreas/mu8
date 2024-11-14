@@ -128,12 +128,12 @@ cycle:
 		cpu.decode_execute(&Mu8, inst)
 
 		if cpu.clear {
-			video.clear <- Ping
+			video.echan <- Event{Kind: EventClear}
 			cpu.clear = false
 		}
 
 		if cpu.sprite != nil {
-			video.sprite <- cpu.sprite
+			video.echan <- Event{Kind: EventSprite, Sprite: cpu.sprite}
 			cpu.R[0x0f] = <-video.collide
 
 			logmsg("Rendered FB from Cpu\n")
@@ -143,9 +143,11 @@ cycle:
 		}
 
 		select {
-		case <-video.quit:
-			logmsg("[cycle]: closing")
-			break cycle
+		case ev := <-video.echan:
+			if ev.Kind == EventQuit {
+				logmsg("[cycle]: closing")
+				break cycle
+			}
 		default:
 			<-time.After(CPU_HZ)
 		}

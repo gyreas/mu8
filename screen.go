@@ -12,22 +12,30 @@ const (
 	BORDER_PAD   = 2 * BORDER_WIDTH
 )
 
-var (
-	Ping   = struct{}{}
-	Resize = struct{}{}
+type EventKind uint8
+
+const (
+	EventQuit EventKind = iota
+	EventClear
+	EventResize
+	EventSprite
 )
+
+type Event struct {
+	Kind   EventKind
+	Width  int
+	Height int
+	Sprite []byte
+}
 
 type Display struct {
 	screen  t.Screen
 	smu     sync.Mutex
 	fb      Fb
 	fbpos   Vec2
+	echan   chan Event
 	key     chan uint8
-	sprite  chan []uint8
 	collide chan uint8
-	resize  chan struct{}
-	clear   chan struct{}
-	quit    chan struct{}
 }
 
 func NewDisplay() Display {
@@ -57,12 +65,9 @@ func NewDisplay() Display {
 		fb:    NewFb(FB_WIDTH, FB_HEIGHT),
 		fbpos: Vec2{BORDER_PAD, BORDER_PAD},
 
-		key:     make(chan uint8, 1),
-		sprite:  make(chan []uint8),
+		echan:   make(chan Event),
+		key:     make(chan uint8),
 		collide: make(chan uint8),
-		resize:  make(chan struct{}),
-		clear:   make(chan struct{}),
-		quit:    make(chan struct{}),
 	}
 	dp.drawBorder()
 
@@ -133,28 +138,34 @@ func (dp *Display) startRenderLoop() {
 renderloop:
 	for {
 		select {
-		case <-dp.quit:
-			log.Println("LoopQuit::")
-			close(dp.key)
-			close(dp.quit)
-			break renderloop
-		case <-dp.clear:
-			clear(dp.fb.buf)
-			dp.renderFb()
-			dp.screen.Show()
-		case sprite := <-dp.sprite:
-			x := int(sprite[0])
-			y := int(sprite[1])
-			dp.collide <- dp.fb.drawSpriteAt(sprite[2:], Vec2{x, y})
-			dp.renderFb()
-			dp.screen.Show()
-		case <-dp.resize:
-			dp.handleResize()
-			sw, sh := dp.screen.Size()
-			log.Printf("Resized to: %dx%d\n", sw, sh)
+		case ev := <-dp.echan:
+			switch ev.Kind {
+			case EventQuit:
+				log.Println("LoopQuit::")
+				close(dp.key)
+				close(dp.echan)
+				break renderloop
+			case EventClear:
+				clear(dp.fb.buf)
+				dp.renderFb()
+				dp.screen.Show()
+			case EventResize:
+				dp.handleResize()
+				sw, sh := ev.Width, ev.Height
+				log.Printf("Resized to: %dx%d\n", sw, sh)
+			case EventSprite:
+				sprite := ev.Sprite
+				x := int(sprite[0])
+				y := int(sprite[1])
+				dp.collide <- dp.fb.drawSpriteAt(sprite[2:], Vec2{x, y})
+				dp.renderFb()
+				dp.screen.Show()
+			default:
+			}
 
 		default:
 		}
+
 		time.Sleep(16 * time.Millisecond)
 	}
 
@@ -173,24 +184,32 @@ func (dp *Display) pollEvent() {
 		switch ev := ev.(type) {
 		case *t.EventResize:
 			log.Printf("EventResize::")
-			dp.resize <- Resize
+			sw, sh := ev.Size()
+			dp.echan <- Event{Kind: EventResize, Width: sw, Height: sh}
 
 		case *t.EventKey:
 			log.Println("EventKey::")
 			if ev.Key() == t.KeyEscape || ev.Key() == t.KeyCtrlC {
 				log.Printf("stopping\n")
-				dp.quit <- Ping
+				dp.echan <- Event{Kind: EventQuit}
 				log.Printf("STOP\n")
 				return
 			} else if ev.Key() == t.KeyRune {
 				logmsg("rune\n")
 				key := uint8(ev.Rune())
+
 				if '0' <= key && key <= '9' {
 					logmsg("key 0-9: %c/%d\n", key, key-'0')
-					dp.key <- key - '0'
-				} else if 'a' <= key && key <= 'f' {
+					key = key - '0'
+				}
+				if 'a' <= key && key <= 'f' {
 					logmsg("key a-f: %c/%d\n", key, 0xa+key-'a')
-					dp.key <- 0xa + key - 'a'
+					key = 0xa + key - 'a'
+				}
+
+				select {
+				case dp.key <- key:
+				default:
 				}
 			}
 		default:
