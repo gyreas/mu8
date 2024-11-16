@@ -9,8 +9,6 @@ import (
 	"time"
 )
 
-const CPU_HZ = 16 * time.Millisecond
-
 type mu8Config struct {
 	rompath     string
 	profileMode bool
@@ -93,7 +91,10 @@ func (Mu8 *Mu8) Quit() {
 	}
 }
 
-const debug = true
+const (
+	debug  = true
+	CPU_HZ = 44 * time.Microsecond
+)
 
 func main() {
 	config := handle_flags()
@@ -104,6 +105,7 @@ func main() {
 
 	go video.startRenderLoop()
 	defer Mu8.Quit()
+
 cycle:
 	for cpu.ip < MEMORY_SIZE {
 		// collect key input for the next instruction that needs it

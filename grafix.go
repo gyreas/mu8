@@ -62,28 +62,54 @@ func (buf *Fb) drawSpriteAt(sprite []byte, ori Vec2) uint8 {
 	x := ori.x
 	y := ori.y
 	collision := uint8(0)
+	sold := []byte{}
+	snew := []byte{}
+	final := []byte{}
 	for _, b := range sprite {
 		// render the bytes starting from the first one
-		j := 0
 		mask := uint8(1 << 7)
-		for mask != 0 {
+		for n := 0; n < 8; n++ {
 			i := (x % buf.w) + (y%buf.h)*buf.w
+
 			old_b := buf.buf[i]
-			new_b := (b & mask) >> (7 - j)
-			collision = old_b ^ new_b
+			sold = append(sold, old_b)
+
+			new_b := (b & mask) >> (7 - n)
+			snew = append(snew, new_b)
+
+			collision |= new_b & old_b
 
 			buf.buf[i] = old_b ^ new_b
+			final = append(final, old_b^new_b)
 
-			j++
 			x++
 			mask >>= 1
 		}
 		x = ori.x
 		y++
 	}
-	logmsg("Drew sprite %v at %v\n", sprite, ori)
+	logmsg("Drew sprite %v at %v (%d)\n", sprite, ori, collision)
+	logmsg("old: %v\n", sold)
+	logmsg("new: %v\n", snew)
+	logmsg("fin: %v\n", final)
+	printSprite(final)
 
 	return collision
+}
+
+func printSprite(sprite []byte) {
+	for i, b:=range sprite{
+		if b == 0 {
+			print(".")
+		} else {
+			print("#")
+		}
+
+		if i % 8 == 0 {
+			println()
+		} 
+	}
+	println()
 }
 
 /* Draws the given digit (a number not a byte) into the specified buffer */

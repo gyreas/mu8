@@ -4,12 +4,17 @@ import (
 	"math/rand"
 )
 
+type Sprite struct {
+	x, y uint8
+	data []byte
+}
+
 type Cpu struct {
 	ip int
 	i  uint16
 	M  [MEMORY_SIZE]uint8
 
-	sprite []uint8
+	sprite Sprite
 
 	pending_key uint8
 	needs_key   bool
@@ -26,7 +31,7 @@ func NewCpu() Cpu {
 	cpu.i = 0
 	cpu.ip = PROGRAM_ADDRESS_OFFSET
 	copy(cpu.M[FONT_DATA_OFFSET:][:len(Digits)], Digits)
-	cpu.sprite = nil
+	cpu.sprite.data = nil
 
 	return cpu
 }
@@ -65,14 +70,14 @@ func (cpu *Cpu) cycle(Mu8 *Mu8, collide, key <-chan uint8, echan chan<- Event) {
 		cpu.clear = false
 	}
 
-	if cpu.sprite != nil {
+	if cpu.sprite.data != nil {
 		echan <- Event{Kind: EventSprite, Sprite: cpu.sprite}
 		cpu.R[0x0f] = <-collide
 
 		logmsg("Rendered FB from Cpu\n")
 
 		// invalidate the data
-		cpu.sprite = nil
+		cpu.sprite.data = nil
 	}
 
 }
@@ -201,10 +206,9 @@ func (cpu *Cpu) decode_execute(Mu8 *Mu8, inst uint16) {
 
 			logmsg("DRAW (0x%.4x) V%.1x(%d), V%.1x(%d), %d bytes\n", cpu.i, x, cx, y, cy, n)
 
-			cpu.sprite = make([]uint8, 2)
-			cpu.sprite[0] = uint8(cx)
-			cpu.sprite[1] = uint8(cy)
-			cpu.sprite = append(cpu.sprite, cpu.M[cpu.i:][:n]...)
+			cpu.sprite.x = uint8(cx)
+			cpu.sprite.y = uint8(cy)
+			cpu.sprite.data = cpu.M[cpu.i:][:n]
 
 			logmsg("Sprite: %v\n", cpu.sprite)
 		}

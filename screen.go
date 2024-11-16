@@ -3,7 +3,6 @@ package main
 import (
 	t "github.com/gdamore/tcell/v2"
 	"log"
-	"sync"
 	"time"
 )
 
@@ -25,12 +24,11 @@ type Event struct {
 	Kind   EventKind
 	Width  int
 	Height int
-	Sprite []byte
+	Sprite Sprite
 }
 
 type Display struct {
 	screen  t.Screen
-	smu     sync.Mutex
 	fb      Fb
 	fbpos   Vec2
 	echan   chan Event
@@ -60,7 +58,6 @@ func NewDisplay() Display {
 
 	dp := Display{
 		screen: s,
-		smu:    sync.Mutex{},
 
 		fb:    NewFb(FB_WIDTH, FB_HEIGHT),
 		fbpos: Vec2{BORDER_PAD, BORDER_PAD},
@@ -155,9 +152,7 @@ renderloop:
 				log.Printf("Resized to: %dx%d\n", sw, sh)
 			case EventSprite:
 				sprite := ev.Sprite
-				x := int(sprite[0])
-				y := int(sprite[1])
-				dp.collide <- dp.fb.drawSpriteAt(sprite[2:], Vec2{x, y})
+				dp.collide <- dp.fb.drawSpriteAt(sprite.data, Vec2{int(sprite.x), int(sprite.y)})
 				dp.renderFb()
 				dp.screen.Show()
 			default:
@@ -165,8 +160,7 @@ renderloop:
 
 		default:
 		}
-
-		time.Sleep(16 * time.Millisecond)
+		time.Sleep(8 * time.Millisecond)
 	}
 
 	log.Println("Done")
