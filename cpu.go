@@ -10,7 +10,7 @@ type Sprite struct {
 }
 
 type Cpu struct {
-	ip int
+	Ip int
 	i  uint16
 	M  [MEMORY_SIZE]uint8
 
@@ -29,20 +29,20 @@ type Cpu struct {
 func NewCpu() Cpu {
 	cpu := Cpu{}
 	cpu.i = 0
-	cpu.ip = PROGRAM_ADDRESS_OFFSET
+	cpu.Ip = PROGRAM_ADDRESS_OFFSET
 	copy(cpu.M[FONT_DATA_OFFSET:][:len(Digits)], Digits)
 	cpu.sprite.data = nil
 
 	return cpu
 }
 
-func (cpu *Cpu) fetch() uint16 {
-	inst := uint16(cpu.M[cpu.ip])<<0x08 | uint16(cpu.M[cpu.ip+1])
-	cpu.ip += 2
+func (cpu *Cpu) Fetch() uint16 {
+	inst := uint16(cpu.M[cpu.Ip])<<0x08 | uint16(cpu.M[cpu.Ip+1])
+	cpu.Ip += 2
 	return inst
 }
 
-func (cpu *Cpu) cycle(Mu8 *Mu8, collide, key <-chan uint8, echan chan<- Event) {
+func (cpu *Cpu) Cycle(Mu8 *Mu8, collide, key <-chan uint8, echan chan<- Event) {
 	if cpu.needs_key {
 		if cpu.pending_key == CHARM {
 			panic("pending shit")
@@ -60,10 +60,10 @@ func (cpu *Cpu) cycle(Mu8 *Mu8, collide, key <-chan uint8, echan chan<- Event) {
 		}
 	}
 
-	inst := cpu.fetch()
-	logmsg("%.4x | [%.4x] \n", cpu.ip-2, inst)
+	inst := cpu.Fetch()
+	logmsg("%.4x | [%.4x] \n", cpu.Ip-2, inst)
 
-	cpu.decode_execute(Mu8, inst)
+	cpu.DecodeExecute(Mu8, inst)
 
 	if cpu.clear {
 		echan <- Event{Kind: EventClear}
@@ -84,7 +84,7 @@ func (cpu *Cpu) cycle(Mu8 *Mu8, collide, key <-chan uint8, echan chan<- Event) {
 
 const CHARM = 0x44
 
-func (cpu *Cpu) decode_execute(Mu8 *Mu8, inst uint16) {
+func (cpu *Cpu) DecodeExecute(Mu8 *Mu8, inst uint16) {
 	logmsg("pending: %v\n", cpu.pending_key)
 
 	mem := &cpu.M
@@ -105,37 +105,37 @@ func (cpu *Cpu) decode_execute(Mu8 *Mu8, inst uint16) {
 			logmsg("CLS\n")
 		case 0xee:
 			cpu.sp--
-			cpu.ip = int(cpu.S[cpu.sp]) // goto next instruction after caller
-			logmsg("RET -> 0x%.4x\n", cpu.ip)
+			cpu.Ip = int(cpu.S[cpu.sp]) // goto next instruction after caller
+			logmsg("RET -> 0x%.4x\n", cpu.Ip)
 		default:
 			logmsg("SYS 0x%.04x\n", nnn)
 
 		}
 	case 0x1:
-		cpu.ip = int(nnn)
-		logmsg("JUMP -> 0x%.4x\n", cpu.ip)
+		cpu.Ip = int(nnn)
+		logmsg("JUMP -> 0x%.4x\n", cpu.Ip)
 		// os.Exit(1)
 	case 0x2:
-		/* cpu.ip is the return address because `fetch()` */
-		cpu.S[cpu.sp] = uint16(cpu.ip)
+		/* cpu.Ip is the return address because `fetch()` */
+		cpu.S[cpu.sp] = uint16(cpu.Ip)
 		cpu.sp += 1 //update the return S ptr
 
-		pre_ip := cpu.ip
-		cpu.ip = int(nnn)
-		logmsg("CALL (0x%.4x) [0x%.4x]\n", cpu.ip, pre_ip)
+		pre_ip := cpu.Ip
+		cpu.Ip = int(nnn)
+		logmsg("CALL (0x%.4x) [0x%.4x]\n", cpu.Ip, pre_ip)
 	case 0x3:
 		if cpu.R[x] == kk {
-			cpu.ip += 2
+			cpu.Ip += 2
 		}
 		logmsg("SKIP.EQ V%d, 0x%.4x\n", x, kk)
 	case 0x4:
 		if cpu.R[x] != kk {
-			cpu.ip += 2
+			cpu.Ip += 2
 		}
 		logmsg("SKIP.NEQ V%d, 0x%.4x\n", x, kk)
 	case 0x5:
 		if cpu.R[x] == cpu.R[y] {
-			cpu.ip += 2
+			cpu.Ip += 2
 		}
 		logmsg("SKIP.EQ V%d, V%d\n", x, y)
 	case 0x6:
@@ -178,14 +178,14 @@ func (cpu *Cpu) decode_execute(Mu8 *Mu8, inst uint16) {
 		}
 	case 0x9:
 		if cpu.R[x] != cpu.R[y] {
-			cpu.ip += 2
+			cpu.Ip += 2
 		}
 		logmsg("SKIP.NEQ V%d, V%d\n", x, kk)
 	case 0xa:
 		cpu.i = nnn
 		logmsg("LD I, 0x%.4x\n", nnn)
 	case 0xb:
-		cpu.ip = int(nnn) + int(cpu.R[0x00])
+		cpu.Ip = int(nnn) + int(cpu.R[0x00])
 		logmsg("JUMP V0, 0x%.4x\n", nnn)
 	case 0xc:
 		{

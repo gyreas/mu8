@@ -58,7 +58,7 @@ func NewFb(w, h int) Fb {
 	}
 }
 
-func (buf *Fb) drawSpriteAt(sprite []byte, ori Vec2) uint8 {
+func (buf *Fb) DrawSpriteAt(sprite []byte, ori Vec2) uint8 {
 	x := ori.x
 	y := ori.y
 	collision := uint8(0)
@@ -115,7 +115,7 @@ func printSprite(sprite []byte) {
 /* Draws the given digit (a number not a byte) into the specified buffer */
 func (buf *Fb) drawDigit(d uint8, ori Vec2) {
 	if (0x0 <= d && d <= 0x9) || (0xa <= d && d <= 0xf) {
-		buf.drawSpriteAt(Digits[d*5:][:5], ori)
+		buf.DrawSpriteAt(Digits[d*5:][:5], ori)
 		return
 	}
 	log.Fatalf("error: '%d' is not a digit\n", d)

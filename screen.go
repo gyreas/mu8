@@ -31,9 +31,9 @@ type Display struct {
 	screen  t.Screen
 	fb      Fb
 	fbpos   Vec2
-	echan   chan Event
-	key     chan uint8
-	collide chan uint8
+	Echan   chan Event
+	Key     chan uint8
+	Collide chan uint8
 }
 
 func NewDisplay() Display {
@@ -62,9 +62,9 @@ func NewDisplay() Display {
 		fb:    NewFb(FB_WIDTH, FB_HEIGHT),
 		fbpos: Vec2{BORDER_PAD, BORDER_PAD},
 
-		echan:   make(chan Event),
-		key:     make(chan uint8),
-		collide: make(chan uint8),
+		Echan:   make(chan Event, 4),
+		Key:     make(chan uint8, 1),
+		Collide: make(chan uint8),
 	}
 	dp.drawBorder()
 
@@ -115,7 +115,7 @@ func (dp *Display) renderFb() {
 // It starts the window with content, and is only called if `isScreenInit` = true
 //
 // This is the driver/center of this abstraction, and must be a Goroutine to not block
-func (dp *Display) startRenderLoop() {
+func (dp *Display) StartRenderLoop() {
 	sw, sh := dp.screen.Size()
 	log.Printf("Screen: %dx%d\n", sw, sh)
 
@@ -135,12 +135,12 @@ func (dp *Display) startRenderLoop() {
 renderloop:
 	for {
 		select {
-		case ev := <-dp.echan:
+		case ev := <-dp.Echan:
 			switch ev.Kind {
 			case EventQuit:
 				log.Println("LoopQuit::")
-				close(dp.key)
-				close(dp.echan)
+				close(dp.Key)
+				close(dp.Echan)
 				break renderloop
 			case EventClear:
 				clear(dp.fb.buf)
@@ -152,7 +152,7 @@ renderloop:
 				log.Printf("Resized to: %dx%d\n", sw, sh)
 			case EventSprite:
 				sprite := ev.Sprite
-				dp.collide <- dp.fb.drawSpriteAt(sprite.data, Vec2{int(sprite.x), int(sprite.y)})
+				dp.Collide <- dp.fb.DrawSpriteAt(sprite.data, Vec2{int(sprite.x), int(sprite.y)})
 				dp.renderFb()
 				dp.screen.Show()
 			default:
@@ -179,13 +179,13 @@ func (dp *Display) pollEvent() {
 		case *t.EventResize:
 			log.Printf("EventResize::")
 			sw, sh := ev.Size()
-			dp.echan <- Event{Kind: EventResize, Width: sw, Height: sh}
+			dp.Echan <- Event{Kind: EventResize, Width: sw, Height: sh}
 
 		case *t.EventKey:
 			log.Println("EventKey::")
 			if ev.Key() == t.KeyEscape || ev.Key() == t.KeyCtrlC {
 				log.Printf("stopping\n")
-				dp.echan <- Event{Kind: EventQuit}
+				dp.Echan <- Event{Kind: EventQuit}
 				log.Printf("STOP\n")
 				return
 			} else if ev.Key() == t.KeyRune {
@@ -202,7 +202,7 @@ func (dp *Display) pollEvent() {
 				}
 
 				select {
-				case dp.key <- key:
+				case dp.Key <- key:
 				default:
 				}
 			}
@@ -219,7 +219,7 @@ func (dp *Display) handleResize() {
 	dp.screen.Sync()
 }
 
-func (dp *Display) handleQuit() {
+func (dp *Display) HandleQuit() {
 	log.Println("Quit::")
 	maybePanic := recover()
 	dp.screen.Clear()
