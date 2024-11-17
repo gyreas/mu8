@@ -19,6 +19,8 @@ type Cpu struct {
 	has_key bool
 	clear   bool
 
+	delay uint8
+	R     [16]uint8
 
 	sp int
 	S  [RETSTACK_SIZE]uint16
@@ -75,6 +77,9 @@ func (cpu *Cpu) Cycle(Mu8 *Mu8, collide, key <-chan uint8, echan chan<- Event) {
 		cpu.sprite.data = nil
 	}
 
+	if cpu.delay > 0 {
+		cpu.delay--
+	}
 }
 
 const CHARM = 0x44
@@ -226,7 +231,8 @@ func (cpu *Cpu) DecodeExecute(Mu8 *Mu8, inst uint16) {
 			logmsg("STOP")
 			return
 		case 0x07:
-			logmsg("LD V%d, DT\n", x)
+			logmsg("LD V%d, DT(%d)\n", x, cpu.delay)
+			cpu.R[x] = cpu.delay
 		case 0x0a:
 			if cpu.has_key {
 				logmsg("LD V%d, KEYPRESS: %x\n", x, cpu.key)
@@ -237,7 +243,8 @@ func (cpu *Cpu) DecodeExecute(Mu8 *Mu8, inst uint16) {
 				cpu.Ip -= 2
 			}
 		case 0x15:
-			logmsg("LD DT,  V%d\n", x)
+			logmsg("LD DT(%d),  V%d\n", cpu.delay, x)
+			cpu.delay = cpu.R[x]
 		case 0x18:
 			logmsg("LD ST,  V%d\n", x)
 		case 0x1e:
