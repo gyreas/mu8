@@ -63,7 +63,7 @@ func NewDisplay() Display {
 		fbpos: Vec2{BORDER_PAD, BORDER_PAD},
 
 		Echan:   make(chan Event, 4),
-		Key:     make(chan uint8, 1),
+		Key:     make(chan uint8),
 		Collide: make(chan uint8),
 	}
 	dp.drawBorder()
@@ -159,11 +159,47 @@ renderloop:
 			}
 
 		default:
+			if dp.handleRemainingEvent() {
+				break renderloop
+			}
 		}
 		time.Sleep(8 * time.Millisecond)
 	}
 
 	log.Println("Done")
+}
+
+func (dp *Display) handleRemainingEvent() bool {
+rest:
+	for {
+		select {
+		case ev := <-dp.Echan:
+			switch ev.Kind {
+			case EventQuit:
+				log.Println("LoopQuit::rest")
+				close(dp.Key)
+				close(dp.Echan)
+				return true
+			case EventClear:
+				clear(dp.fb.buf)
+				dp.renderFb()
+				dp.screen.Show()
+			case EventResize:
+				dp.handleResize()
+				sw, sh := ev.Width, ev.Height
+				log.Printf("Resized to: %dx%d\n", sw, sh)
+			case EventSprite:
+				sprite := ev.Sprite
+				dp.Collide <- dp.fb.DrawSpriteAt(sprite.data, Vec2{int(sprite.x), int(sprite.y)})
+				dp.renderFb()
+				dp.screen.Show()
+			default:
+				break rest
+			}
+		}
+
+	}
+	return false
 }
 
 // This async'ly polls events from the window and other sources. It also emits
@@ -201,10 +237,7 @@ func (dp *Display) pollEvent() {
 					key = 0xa + key - 'a'
 				}
 
-				select {
-				case dp.Key <- key:
-				default:
-				}
+				dp.Key <- key
 			}
 		default:
 		}

@@ -3,21 +3,8 @@ build: mu8
 mu8:
     go build -o mu8 Mu8.go cpu.go memory.go screen.go grafix.go
 
-screen:
-    go build -o screen sc.go
-    ./screen
-
-spin:
-    go build -o spinner spinner.go
-    ./spinner
-
-tcell:
-    go build -o gfx screen.go grafix.go
-    ./gfx
-
-resize:
-    go build -race -o res resize.go
-    ./res
+test: build
+    ./mu8 examples/chip8-test-rom/test_opcode.ch8 2> mu8.log
 
 examples: build
     ./mu8 examples/randomnumber/random_number_test.ch8

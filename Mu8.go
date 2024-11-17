@@ -93,7 +93,7 @@ func (Mu8 *Mu8) Quit() {
 
 const (
 	debug  = true
-	CPU_HZ = 44 * time.Microsecond
+	CPU_HZ = 1_444_444 * time.Nanosecond
 )
 
 func main() {
@@ -118,7 +118,7 @@ cycle:
 				break cycle
 			}
 		default:
-			<-time.After(CPU_HZ)
+			time.Sleep(CPU_HZ)
 		}
 	}
 }

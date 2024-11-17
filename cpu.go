@@ -14,13 +14,11 @@ type Cpu struct {
 	i  uint16
 	M  [MEMORY_SIZE]uint8
 
-	sprite Sprite
+	sprite  Sprite
+	key     uint8
+	has_key bool
+	clear   bool
 
-	pending_key uint8
-	needs_key   bool
-	clear       bool
-
-	R [16]uint8
 
 	sp int
 	S  [RETSTACK_SIZE]uint16
@@ -43,20 +41,17 @@ func (cpu *Cpu) Fetch() uint16 {
 }
 
 func (cpu *Cpu) Cycle(Mu8 *Mu8, collide, key <-chan uint8, echan chan<- Event) {
-	if cpu.needs_key {
-		if cpu.pending_key == CHARM {
-			panic("pending shit")
-		}
-
-		logmsg("needs_key\n")
-		k := <-key
-		if 0x00 <= k && k <= 0x0f {
-			cpu.R[cpu.pending_key] = k
-			cpu.needs_key = false
-
-			logmsg("LD V%d, KEYPRESS: %x\n", cpu.pending_key, cpu.R[cpu.pending_key])
-			logmsg("[cycle]: got key: %d\n", cpu.R[cpu.pending_key])
-			cpu.pending_key = CHARM
+	// see if any key was pressed
+	// TODO: make a small deadline for this instead of instantaneous
+	{
+		select {
+		case k := <-key: // got a key
+			// now, the key must correspond to its index in `cpu.key`
+			logmsg("[cycle]: got key: %d\n", k)
+			cpu.key = k
+			cpu.has_key = true
+		default:
+			cpu.has_key = false
 		}
 	}
 
@@ -85,8 +80,6 @@ func (cpu *Cpu) Cycle(Mu8 *Mu8, collide, key <-chan uint8, echan chan<- Event) {
 const CHARM = 0x44
 
 func (cpu *Cpu) DecodeExecute(Mu8 *Mu8, inst uint16) {
-	logmsg("pending: %v\n", cpu.pending_key)
-
 	mem := &cpu.M
 
 	high := uint8(inst >> 0x08)
@@ -216,8 +209,14 @@ func (cpu *Cpu) DecodeExecute(Mu8 *Mu8, inst uint16) {
 		switch low {
 		case 0x9e:
 			logmsg("SKIP.KP V%d\n", x)
+			if cpu.R[x] == cpu.key {
+				cpu.Ip += 2
+			}
 		case 0xa1:
 			logmsg("SKIP.KNP V%d\n", x)
+			if cpu.R[x] != cpu.key {
+				cpu.Ip += 2
+			}
 		default:
 			logmsg("error: unknown byte: [0x%.2x] (0xe0)\n", low)
 		}
@@ -229,9 +228,14 @@ func (cpu *Cpu) DecodeExecute(Mu8 *Mu8, inst uint16) {
 		case 0x07:
 			logmsg("LD V%d, DT\n", x)
 		case 0x0a:
-			logmsg("----- x: '%c' ----\n", x)
-			cpu.pending_key = x
-			cpu.needs_key = true
+			if cpu.has_key {
+				logmsg("LD V%d, KEYPRESS: %x\n", x, cpu.key)
+				cpu.R[x] = cpu.key
+				cpu.has_key = false
+			} else {
+				// spin on this instruction until a key is pressed
+				cpu.Ip -= 2
+			}
 		case 0x15:
 			logmsg("LD DT,  V%d\n", x)
 		case 0x18:
